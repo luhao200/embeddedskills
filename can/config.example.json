@@ -1,0 +1,10 @@
+{
+  "default_interface": "",
+  "default_channel": "",
+  "default_bitrate": 0,
+  "default_data_bitrate": 0,
+  "default_db_file": "",
+  "default_log_dir": ".logs",
+  "slcan_serial_port": "",
+  "slcan_serial_baudrate": 115200
+}
