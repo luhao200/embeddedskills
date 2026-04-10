@@ -1,0 +1,19 @@
+{
+  "usb_serial_chips": [
+    {"vid": "1A86", "pid": "7523", "name": "CH340"},
+    {"vid": "1A86", "pid": "55D4", "name": "CH9102"},
+    {"vid": "10C4", "pid": "EA60", "name": "CP2102"},
+    {"vid": "10C4", "pid": "EA70", "name": "CP2105"},
+    {"vid": "0403", "pid": "6001", "name": "FT232R"},
+    {"vid": "0403", "pid": "6010", "name": "FT2232"},
+    {"vid": "0403", "pid": "6014", "name": "FT232H"},
+    {"vid": "067B", "pid": "2303", "name": "PL2303"},
+    {"vid": "067B", "pid": "23A3", "name": "PL2303GS"},
+    {"vid": "2341", "pid": "0043", "name": "Arduino Uno"},
+    {"vid": "2341", "pid": "0001", "name": "Arduino Mega"},
+    {"vid": "1366", "pid": "0105", "name": "SEGGER J-Link (CDC)"},
+    {"vid": "0D28", "pid": "0204", "name": "DAPLink (CDC)"},
+    {"vid": "303A", "pid": "1001", "name": "ESP32-S2 (CDC)"},
+    {"vid": "303A", "pid": "4001", "name": "ESP32-S3 (CDC)"}
+  ]
+}
