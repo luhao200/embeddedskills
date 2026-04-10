@@ -1,0 +1,7 @@
+#IDE
+.vscode
+.idea
+.codex
+.claude
+
+config.json
