@@ -1,4 +1,4 @@
-"""J-Link 设备探测、烧录、内存读写、寄存器查看、复位"""
+"""J-Link 设备探测、烧录、内存读写、寄存器查看、复位、在线调试"""
 
 import argparse
 import json
@@ -19,6 +19,10 @@ TEMPLATES = {
     "write_mem": "si {interface}\nspeed {speed}\nconnect\nhalt\nw{width} {address},{value}\nexit\n",
     "regs": "si {interface}\nspeed {speed}\nconnect\nhalt\nregs\nexit\n",
     "reset": "si {interface}\nspeed {speed}\nconnect\nr\ng\nexit\n",
+    "halt": "si {interface}\nspeed {speed}\nconnect\nhalt\nregs\nexit\n",
+    "go": "si {interface}\nspeed {speed}\nconnect\ng\nexit\n",
+    "step": "si {interface}\nspeed {speed}\nconnect\nhalt\n{step_commands}regs\nexit\n",
+    "run_to": "si {interface}\nspeed {speed}\nconnect\nSetBP {address}\ng\nsleep {timeout_ms}\nhalt\nregs\nexit\n",
 }
 
 # 错误模式匹配
@@ -41,6 +45,22 @@ def build_jlink_cmd(exe: str, device: str, script_path: str, serial_no: str = ""
         cmd.extend(["-SelectEmuBySN", serial_no])
     cmd.extend(["-CommandFile", script_path])
     return cmd
+
+
+def parse_registers(stdout: str) -> dict:
+    """从 JLink 输出中解析寄存器值"""
+    registers = {}
+    # 匹配 "REG = HEXVALUE" 或 "REG= HEXVALUE" 格式
+    reg_lines = re.findall(r"(\w+)\s*=\s*([0-9A-Fa-f]{8})", stdout)
+    if reg_lines:
+        registers = {name: f"0x{val}" for name, val in reg_lines}
+    return registers
+
+
+def parse_pc(stdout: str) -> str:
+    """从输出中提取 PC 值"""
+    m = re.search(r"PC\s*=\s*([0-9A-Fa-f]{8})", stdout)
+    return f"0x{m.group(1)}" if m else ""
 
 
 def parse_output(stdout: str, action: str) -> dict:
@@ -77,20 +97,53 @@ def parse_output(stdout: str, action: str) -> dict:
 
     # read-mem: 提取内存数据
     elif action == "read-mem":
-        # 匹配 hex dump 行: 08000000 = 20020000 08005BED 080024C7 08002377
         mem_lines = re.findall(r"^([0-9A-Fa-f]{8}) = (.+)$", stdout, re.MULTILINE)
         if mem_lines:
             result["memory"] = []
             for addr, data in mem_lines:
-                # 只保留十六进制数据部分，去掉尾部空白
                 cleaned = data.strip()
                 result["memory"].append({"address": f"0x{addr}", "data": cleaned})
 
-    # regs: 提取寄存器值
-    elif action == "regs":
-        reg_lines = re.findall(r"(\w+)\s*=\s*([0-9A-Fa-f]{8})", stdout)
-        if reg_lines:
-            result["registers"] = {name: f"0x{val}" for name, val in reg_lines}
+    # regs / halt: 提取寄存器值
+    elif action in ("regs", "halt"):
+        regs = parse_registers(stdout)
+        if regs:
+            result["registers"] = regs
+
+    # step: 提取执行的指令和寄存器
+    elif action == "step":
+        # 匹配 step 输出: ADDR: OPCODE INSTRUCTION
+        instructions = re.findall(
+            r"^([0-9A-Fa-f]{8}):\s+([0-9A-Fa-f ]+?)\s{2,}(.+)$", stdout, re.MULTILINE
+        )
+        if instructions:
+            result["steps"] = []
+            for addr, opcode, instr in instructions:
+                result["steps"].append({
+                    "address": f"0x{addr}",
+                    "opcode": opcode.strip(),
+                    "instruction": instr.strip(),
+                })
+        regs = parse_registers(stdout)
+        if regs:
+            result["registers"] = regs
+
+    # run-to: 提取断点命中状态和寄存器
+    elif action == "run-to":
+        m = re.search(r"Breakpoint set @ addr 0x([0-9A-Fa-f]+)\s*\(Handle = (\d+)\)", stdout)
+        if m:
+            result["bp_address"] = f"0x{m.group(1)}"
+            result["bp_handle"] = int(m.group(2))
+        elif "Could not set" in stdout:
+            return {"error_code": "bp_set_failed", "error_message": "断点设置失败，可能硬件断点槽已满", "raw": stdout}
+        regs = parse_registers(stdout)
+        if regs:
+            result["registers"] = regs
+        # 判断是否命中断点（PC == 断点地址）
+        pc = parse_pc(stdout)
+        if m and pc:
+            bp_addr = f"0x{m.group(1)}"
+            result["bp_hit"] = pc.upper() == bp_addr.upper()
 
     return result
 
@@ -98,7 +151,8 @@ def parse_output(stdout: str, action: str) -> dict:
 def run_jlink(exe: str, device: str, action: str, interface: str = "SWD",
               speed: str = "4000", serial_no: str = "", file: str = "",
               address: str = "", length: str = "256", value: str = "",
-              width: str = "32") -> dict:
+              width: str = "32", step_count: int = 1,
+              timeout_ms: str = "2000") -> dict:
     """执行 JLink Commander 命令"""
     start_time = time.time()
 
@@ -129,10 +183,16 @@ def run_jlink(exe: str, device: str, action: str, interface: str = "SWD",
     width_map = {"8": "8", "16": "16", "32": "32"}
     w = width_map.get(width, "32")
 
+    # step 命令: 生成多条 step 指令
+    step_commands = ""
+    if action == "step":
+        step_commands = "".join(["step\n" for _ in range(step_count)])
+
     # 渲染命令脚本
     script_content = template.format(
         interface=interface, speed=speed, file=file,
         address=address, length=length, value=value, width=w,
+        step_commands=step_commands, timeout_ms=timeout_ms,
     )
 
     # 写入临时文件
@@ -193,8 +253,19 @@ def run_jlink(exe: str, device: str, action: str, interface: str = "SWD",
             "write-mem": "内存写入成功",
             "regs": "寄存器读取成功",
             "reset": "复位成功",
+            "halt": f"已暂停，PC={parse_pc(proc.stdout)}",
+            "go": "已恢复运行",
+            "step": f"单步{step_count}次，PC={parse_pc(proc.stdout)}",
+            "run-to": f"运行至断点，PC={parse_pc(proc.stdout)}",
         }
         summary = summary_map.get(action, "执行成功")
+
+        # 补充 run-to 摘要
+        if action == "run-to" and "bp_hit" in parsed:
+            if parsed["bp_hit"]:
+                summary = f"断点命中 @ {parsed['bp_address']}，PC={parse_pc(proc.stdout)}"
+            else:
+                summary = f"超时未命中断点 @ {parsed.get('bp_address', '?')}，当前 PC={parse_pc(proc.stdout)}"
 
         details = {
             "device": device,
@@ -213,7 +284,6 @@ def run_jlink(exe: str, device: str, action: str, interface: str = "SWD",
 
         # 判断状态: returncode!=0 可能只是警告，需结合输出判断
         if proc.returncode != 0 and "error_code" not in parsed:
-            # 有些 JLink 命令返回非零但实际成功，检查输出
             if action == "flash" and parsed.get("verified"):
                 status = "ok"
             else:
@@ -240,28 +310,35 @@ def output_json(data: dict):
     print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
+ALL_ACTIONS = [
+    "info", "flash", "read-mem", "write-mem", "regs", "reset",
+    "halt", "go", "step", "run-to",
+]
+
+
 def main():
-    parser = argparse.ArgumentParser(description="J-Link 设备探测/烧录/内存读写/寄存器/复位")
-    parser.add_argument("action", choices=["info", "flash", "read-mem", "write-mem", "regs", "reset"])
+    parser = argparse.ArgumentParser(description="J-Link 设备探测/烧录/内存读写/寄存器/复位/在线调试")
+    parser.add_argument("action", choices=ALL_ACTIONS)
     parser.add_argument("--exe", default="", help="JLink.exe 路径")
     parser.add_argument("--device", required=True, help="芯片型号（如 STM32F407VG）")
     parser.add_argument("--interface", default="SWD", choices=["SWD", "JTAG"], help="调试接口")
     parser.add_argument("--speed", default="4000", help="调试速率 kHz")
     parser.add_argument("--serial-no", default="", help="探针序列号")
     parser.add_argument("--file", default="", help="固件文件路径（flash 用）")
-    parser.add_argument("--address", default="", help="地址（flash .bin / read-mem / write-mem 用）")
+    parser.add_argument("--address", default="", help="地址（flash .bin / read-mem / write-mem / bp-set 用）")
     parser.add_argument("--length", default="256", help="读取长度（read-mem 用）")
     parser.add_argument("--value", default="", help="写入值（write-mem 用）")
     parser.add_argument("--width", default="32", choices=["8", "16", "32"], help="数据宽度")
+    parser.add_argument("--count", type=int, default=1, help="单步次数（step 用）")
+    parser.add_argument("--timeout-ms", default="2000", help="run-to 等待断点命中的超时毫秒数")
     parser.add_argument("--json", action="store_true", dest="as_json")
 
     args = parser.parse_args()
 
-    # flash 必须提供 file
+    # 参数校验
     if args.action == "flash" and not args.file:
         result = {
-            "status": "error",
-            "action": "flash",
+            "status": "error", "action": "flash",
             "error": {"code": "missing_file", "message": "flash 必须提供 --file 固件文件路径"},
         }
         if args.as_json:
@@ -270,11 +347,9 @@ def main():
             print(f"错误: {result['error']['message']}", file=sys.stderr)
         sys.exit(1)
 
-    # write-mem 必须提供 address 和 value
     if args.action == "write-mem" and (not args.address or not args.value):
         result = {
-            "status": "error",
-            "action": "write-mem",
+            "status": "error", "action": "write-mem",
             "error": {"code": "missing_params", "message": "write-mem 必须提供 --address 和 --value"},
         }
         if args.as_json:
@@ -283,12 +358,21 @@ def main():
             print(f"错误: {result['error']['message']}", file=sys.stderr)
         sys.exit(1)
 
-    # read-mem 必须提供 address
     if args.action == "read-mem" and not args.address:
         result = {
-            "status": "error",
-            "action": "read-mem",
+            "status": "error", "action": "read-mem",
             "error": {"code": "missing_address", "message": "read-mem 必须提供 --address"},
+        }
+        if args.as_json:
+            output_json(result)
+        else:
+            print(f"错误: {result['error']['message']}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.action == "run-to" and not args.address:
+        result = {
+            "status": "error", "action": "run-to",
+            "error": {"code": "missing_address", "message": "run-to 必须提供 --address 断点地址"},
         }
         if args.as_json:
             output_json(result)
@@ -308,6 +392,8 @@ def main():
         length=args.length,
         value=args.value,
         width=args.width,
+        step_count=args.count,
+        timeout_ms=args.timeout_ms,
     )
 
     if args.as_json:
@@ -316,14 +402,22 @@ def main():
         if result["status"] == "ok":
             print(f"[{args.action}] {result.get('summary', '成功')}")
             details = result.get("details", {})
-            print(f"  芯片: {details.get('device', 'N/A')}")
-            print(f"  耗时: {details.get('elapsed_ms', 0)}ms")
             if "registers" in details:
-                for name, val in details["registers"].items():
-                    print(f"  {name} = {val}")
+                # 只显示核心寄存器
+                core_regs = ["PC", "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
+                             "R8", "R9", "R10", "R11", "R12", "MSP", "PSP", "XPSR"]
+                for name in core_regs:
+                    if name in details["registers"]:
+                        print(f"  {name:>5s} = {details['registers'][name]}")
+            if "steps" in details:
+                for s in details["steps"]:
+                    print(f"  {s['address']}: {s['opcode']:16s} {s['instruction']}")
             if "memory" in details:
                 for m in details["memory"]:
                     print(f"  {m['address']}: {m['data']}")
+            if "bp_hit" in details:
+                hit = "命中" if details["bp_hit"] else "未命中（超时）"
+                print(f"  断点: {details.get('bp_address', '?')} — {hit}")
         else:
             err = result.get("error", {})
             print(f"[{args.action}] 失败 — {err.get('message', '未知错误')}", file=sys.stderr)

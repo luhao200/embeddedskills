@@ -1,15 +1,17 @@
 ---
 name: jlink
 description: >-
-  J-Link 下载与在线调试工具，用于探测设备、烧录固件、读写内存、查看寄存器、复位目标和读取 RTT 日志。
-  当用户提到 J-Link、JLink、RTT、烧录固件、写内存、读内存、寄存器查看、目标复位、探针连通性检查时自动触发，
-  也兼容 /jlink 显式调用。即使用户只是说"烧录一下"或"看看 RTT 输出"，只要上下文涉及 J-Link 探针就应触发此 skill。
-argument-hint: "[info|flash|read-mem|write-mem|regs|reset|rtt] ..."
+  J-Link 下载与在线调试工具，用于探测设备、烧录固件、读写内存、查看寄存器、复位目标、读取 RTT 日志，
+  以及在线调试（暂停/恢复/单步/断点运行/调用栈/变量查看）。
+  当用户提到 J-Link、JLink、RTT、烧录固件、写内存、读内存、寄存器查看、目标复位、探针连通性检查、
+  在线调试、单步、断点、调用栈时自动触发，也兼容 /jlink 显式调用。
+  即使用户只是说"烧录一下"、"看看 RTT 输出"或"调试一下"，只要上下文涉及 J-Link 探针就应触发此 skill。
+argument-hint: "[info|flash|read-mem|write-mem|regs|reset|halt|go|step|run-to|rtt|gdb] ..."
 ---
 
 # J-Link 下载与在线调试
 
-本 skill 提供 J-Link 探针的设备探测、固件烧录、内存读写、寄存器查看、目标复位和 RTT 日志读取能力。
+本 skill 提供 J-Link 探针的设备探测、固件烧录、内存读写、寄存器查看、目标复位、RTT 日志读取，以及轻量在线调试和 GDB 源码级调试能力。
 
 ## 配置
 
@@ -30,9 +32,9 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
 ```
 
 - `exe`：JLink.exe 完整路径（必填）
-- `gdbserver_exe`：JLinkGDBServerCL.exe 路径，RTT 功能需要
+- `gdbserver_exe`：JLinkGDBServerCL.exe 路径，RTT 和 GDB 调试需要
 - `rtt_exe`：JLinkRTTClient.exe 路径
-- `default_device`：默认芯片型号（如 STM32F407VG），为空时需用户指定
+- `default_device`：默认芯片型号（如 GD32F470ZG），为空时需用户指定
 - `default_interface`：调试接口，SWD 或 JTAG，默认 SWD
 - `default_speed`：调试速率 kHz，默认 4000
 - `serial_no`：默认探针序列号，多探针场景下使用
@@ -40,6 +42,8 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
 - `operation_mode`：`1` 直接执行 / `2` 输出风险摘要但不阻塞 / `3` 执行前确认
 
 ## 子命令
+
+### 基础操作
 
 | 子命令 | 用途 | 风险 |
 |--------|------|------|
@@ -51,6 +55,23 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
 | `reset` | 复位目标芯片 | 高 |
 | `rtt` | 读取 RTT 日志输出 | 低 |
 
+### 在线调试（JLink Commander）
+
+| 子命令 | 用途 | 风险 |
+|--------|------|------|
+| `halt` | 暂停 CPU，返回寄存器状态 | 低 |
+| `go` | 恢复 CPU 运行 | 低 |
+| `step` | 单步执行（支持指定步数），返回执行的指令和寄存器 | 低 |
+| `run-to` | 设置断点并运行，等待命中后返回状态 | 低 |
+
+### GDB 源码级调试
+
+| 子命令 | 用途 | 依赖 |
+|--------|------|------|
+| `gdb run` | 启动 GDB Server 并执行任意 GDB 命令序列 | arm-none-eabi-gdb |
+| `gdb backtrace` | 获取当前调用栈 | arm-none-eabi-gdb |
+| `gdb locals` | 查看当前帧局部变量 | arm-none-eabi-gdb |
+
 ## 执行流程
 
 1. 读取 `config.json`，确认 `exe` 路径有效
@@ -60,35 +81,46 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
 5. 按 `operation_mode` 决定是否需要确认后执行
 6. 使用模板生成临时 `.jlink` 命令文件，调用 JLink.exe 时带 `-NoGui 1 -ExitOnError 1 -AutoConnect 1`
 7. 解析输出和返回码，返回结构化结果
-8. `rtt` 子命令先通过 JLinkGDBServerCL.exe 建立调试会话，再启动 RTT 客户端读取输出
 
 ## 脚本调用
 
-skill 目录下有两个 Python 脚本，使用标准库实现，无额外依赖。
+skill 目录下有三个 Python 脚本，使用标准库实现，无额外依赖。
 
-### jlink_exec.py — 设备探测、烧录、内存读写、寄存器、复位
+### jlink_exec.py — 基础操作 + 轻量调试
 
 ```bash
 # 探测连通性
-python <skill-dir>/scripts/jlink_exec.py info --device STM32F407VG --json
+python <skill-dir>/scripts/jlink_exec.py info --device GD32F470ZG --json
 
 # 烧录固件
-python <skill-dir>/scripts/jlink_exec.py flash --file build/app.hex --device STM32F407VG --json
+python <skill-dir>/scripts/jlink_exec.py flash --file build/app.hex --device GD32F470ZG --json
 
 # 烧录 .bin（必须提供地址）
-python <skill-dir>/scripts/jlink_exec.py flash --file build/app.bin --device STM32F407VG --address 0x08000000 --json
+python <skill-dir>/scripts/jlink_exec.py flash --file build/app.bin --device GD32F470ZG --address 0x08000000 --json
 
 # 读取内存
-python <skill-dir>/scripts/jlink_exec.py read-mem --address 0x08000000 --length 256 --device STM32F407VG --json
+python <skill-dir>/scripts/jlink_exec.py read-mem --address 0x08000000 --length 256 --device GD32F470ZG --json
 
 # 写入内存
-python <skill-dir>/scripts/jlink_exec.py write-mem --address 0x20000000 --value 0x12345678 --device STM32F407VG --json
+python <skill-dir>/scripts/jlink_exec.py write-mem --address 0x20000000 --value 0x12345678 --device GD32F470ZG --json
 
 # 查看寄存器
-python <skill-dir>/scripts/jlink_exec.py regs --device STM32F407VG --json
+python <skill-dir>/scripts/jlink_exec.py regs --device GD32F470ZG --json
 
 # 复位目标
-python <skill-dir>/scripts/jlink_exec.py reset --device STM32F407VG --json
+python <skill-dir>/scripts/jlink_exec.py reset --device GD32F470ZG --json
+
+# 暂停 CPU
+python <skill-dir>/scripts/jlink_exec.py halt --device GD32F470ZG --json
+
+# 恢复运行
+python <skill-dir>/scripts/jlink_exec.py go --device GD32F470ZG --json
+
+# 单步执行（3 步）
+python <skill-dir>/scripts/jlink_exec.py step --device GD32F470ZG --count 3 --json
+
+# 运行到断点地址
+python <skill-dir>/scripts/jlink_exec.py run-to --device GD32F470ZG --address 0x08001234 --timeout-ms 3000 --json
 ```
 
 通用可选参数：`--interface SWD|JTAG`、`--speed 4000`、`--serial-no <序列号>`、`--exe <JLink.exe路径>`
@@ -96,12 +128,34 @@ python <skill-dir>/scripts/jlink_exec.py reset --device STM32F407VG --json
 ### jlink_rtt.py — RTT 日志读取
 
 ```bash
-python <skill-dir>/scripts/jlink_rtt.py --device STM32F407VG --json
+python <skill-dir>/scripts/jlink_rtt.py --device GD32F470ZG --json
 ```
 
-可选参数：`--serial-no`、`--channel`、`--encoding`、`--rtt-port`、`--exe <JLink.exe路径>`、`--gdbserver-exe <路径>`、`--rtt-exe <路径>`
+可选参数：`--serial-no`、`--channel`、`--encoding`、`--rtt-port`、`--gdbserver-exe <路径>`、`--rtt-exe <路径>`
 
-RTT 工作原理：脚本先通过 JLinkGDBServerCL.exe 建立调试连接（保持探针连接活跃），再启动 JLinkRTTClient.exe 读取 RTT 数据。`--json` 模式输出 JSON Lines。
+RTT 工作原理：脚本先通过 JLinkGDBServerCL.exe 建立调试连接，再启动 JLinkRTTClient.exe 读取 RTT 数据。`--json` 模式输出 JSON Lines。
+
+### jlink_gdb.py — GDB 源码级调试（需要 arm-none-eabi-gdb）
+
+```bash
+# 执行自定义 GDB 命令序列
+python <skill-dir>/scripts/jlink_gdb.py run \
+  --gdbserver-exe <路径> --gdb-exe <arm-none-eabi-gdb路径> \
+  --device GD32F470ZG --elf build/app.elf \
+  --commands "break main" "continue" "backtrace" "info locals" --json
+
+# 快捷：获取调用栈
+python <skill-dir>/scripts/jlink_gdb.py backtrace \
+  --gdbserver-exe <路径> --gdb-exe <路径> \
+  --device GD32F470ZG --elf build/app.elf --json
+
+# 快捷：查看局部变量
+python <skill-dir>/scripts/jlink_gdb.py locals \
+  --gdbserver-exe <路径> --gdb-exe <路径> \
+  --device GD32F470ZG --elf build/app.elf --json
+```
+
+GDB 调试需要 ELF 文件才能进行源码级调试（断点到函数名、查看变量）。没有 ELF 时仍可使用地址级调试。
 
 ## 输出格式
 
@@ -111,18 +165,43 @@ RTT 工作原理：脚本先通过 JLinkGDBServerCL.exe 建立调试连接（保
 ```json
 {
   "status": "ok",
-  "action": "flash",
-  "summary": "烧录成功",
-  "details": { "device": "STM32F407VG", "elapsed_ms": 1820, "errorlevel": 0 }
+  "action": "halt",
+  "summary": "已暂停，PC=0x08049ABC",
+  "details": {
+    "device": "GD32F470ZG",
+    "registers": { "PC": "0x08049ABC", "R0": "0x00000004", "..." : "..." }
+  }
 }
 ```
 
-错误示例：
+step 示例（包含执行的指令）：
 ```json
 {
-  "status": "error",
-  "action": "flash",
-  "error": { "code": "cannot_connect_target", "message": "无法连接目标芯片" }
+  "status": "ok",
+  "action": "step",
+  "summary": "单步3次，PC=0x08049AB4",
+  "details": {
+    "steps": [
+      { "address": "0x08049AB8", "opcode": "80 1B", "instruction": "SUBS R0, R0, R6" },
+      { "address": "0x08049ABA", "opcode": "A8 42", "instruction": "CMP R0, R5" },
+      { "address": "0x08049ABC", "opcode": "FA D3", "instruction": "BCC #-0x0C" }
+    ],
+    "registers": { "PC": "0x08049AB4", "..." : "..." }
+  }
+}
+```
+
+run-to 示例（断点命中）：
+```json
+{
+  "status": "ok",
+  "action": "run-to",
+  "summary": "断点命中 @ 0x08049AB4，PC=0x08049AB4",
+  "details": {
+    "bp_address": "0x08049AB4",
+    "bp_hit": true,
+    "registers": { "PC": "0x08049AB4", "..." : "..." }
+  }
 }
 ```
 
@@ -133,7 +212,31 @@ RTT 工作原理：脚本先通过 JLinkGDBServerCL.exe 建立调试连接（保
 - `.bin` 文件必须显式提供烧录地址，缺失时报错
 - 连接失败时给出排查建议（检查连线、供电、接口类型、速度），不自动尝试更激进参数
 - 烧录、写内存、复位在参数完整且用户意图明确时直接执行
-- 结果回显中始终包含目标芯片、探针序列号、接口类型和执行动作
+- `run-to` 的断点在单次 JLink 会话内完成设置和清除，不存在跨会话 handle 问题
+- 结果回显中始终包含目标芯片、接口类型和执行动作
+
+## 调试典型工作流
+
+### 快速排查（JLink Commander）
+
+```
+halt → regs → read-mem → step → go
+```
+适合查看当前执行位置、寄存器状态、内存值，无需 ELF 和 GDB。
+
+### 断点调试（JLink Commander）
+
+```
+run-to(address) → regs → read-mem → go
+```
+在指定地址设置断点并等待命中，查看此时的状态。
+
+### 源码级调试（GDB）
+
+```
+gdb run --elf app.elf --commands "break main" "continue" "backtrace" "info locals"
+```
+需要 ELF 文件和 arm-none-eabi-gdb，支持函数名断点和变量查看。
 
 ## 参考
 
