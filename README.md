@@ -1,6 +1,6 @@
 简体中文 | [English](./README.en.md)
 
-# AI Skills — 嵌入式开发调试工具集
+# embeddedskills — 嵌入式开发调试工具集
 
 **让 AI 不止写代码，还能编译、烧录、调试——补上嵌入式开发自动化的最后一环。**
 
@@ -103,7 +103,7 @@ flowchart LR
 graph TB
     AI["🤖 AI 编码助手<br/>(Claude Code / Copilot / TRAE)"]
 
-    subgraph skills["AI Skills 工具集"]
+    subgraph skills["embeddedskills 工具集"]
         direction LR
         subgraph build["构建层"]
             keil["keil<br/>Keil MDK 编译"]
@@ -116,9 +116,6 @@ graph TB
             serial["serial<br/>串口调试"]
             can["can<br/>CAN 总线"]
             net["net<br/>网络调试"]
-        end
-        subgraph ext["辅助"]
-            grok["grok-search<br/>Web 搜索"]
         end
     end
 
@@ -151,7 +148,6 @@ graph TB
 | **serial** | 串口扫描、实时监控、数据发送、Hex 查看、日志 | `scan` `monitor` `send` `hex` `log` |
 | **can** | CAN/CAN-FD 接口扫描、监控、发帧、DBC 解码 | `scan` `monitor` `send` `log` `decode` `stats` |
 | **net** | 抓包、pcap 分析、连通性测试、端口扫描 | `iface` `capture` `analyze` `ping` `scan` `stats` |
-| **grok-search** | 通过 Grok API 实时 Web 搜索 | — |
 
 ## 安装
 
@@ -159,10 +155,10 @@ graph TB
 
 ```bash
 # 安装全部 skill（全局）
-npx skills add https://github.com/luhao200/aiskills -g -y
+npx skills add https://github.com/luhao200/embeddedskills -g -y
 
 # 仅安装某个 skill
-npx skills add https://github.com/luhao200/aiskills --skill jlink -g -y
+npx skills add https://github.com/luhao200/embeddedskills --skill jlink -g -y
 ```
 
 常用管理命令：
@@ -177,10 +173,10 @@ npx skills remove -g    # 移除
 
 ```bash
 # 克隆仓库到 skill 目录（全局生效）
-git clone https://github.com/luhao200/aiskills ~/.claude/skills/aiskills
+git clone https://github.com/luhao200/embeddedskills ~/.claude/skills/embeddedskills
 
 # 或仅用于当前项目（放在项目根目录下）
-git clone https://github.com/luhao200/aiskills .claude/skills/aiskills
+git clone https://github.com/luhao200/embeddedskills .claude/skills/embeddedskills
 ```
 
 ### 配置
@@ -188,7 +184,7 @@ git clone https://github.com/luhao200/aiskills .claude/skills/aiskills
 安装完成后，将需要使用的 skill 的 `config.example.json` 复制为 `config.json`，填入本地实际路径和参数：
 
 ```bash
-cd ~/.claude/skills/aiskills/jlink
+cd ~/.claude/skills/embeddedskills/jlink
 cp config.example.json config.json
 # 编辑 config.json，填写 JLink.exe 路径、默认芯片型号等
 ```
@@ -205,7 +201,6 @@ cp config.example.json config.json
 | serial | `pip install pyserial` + USB 转串口驱动 |
 | can | `pip install python-can cantools pyserial` + USB-CAN 驱动 |
 | net | Wireshark (tshark), Npcap |
-| grok-search | Grok API 密钥 |
 
 ## 各 Skill 详细介绍
 
@@ -266,14 +261,6 @@ cp config.example.json config.json
 
 ---
 
-### grok-search — Web 搜索
-
-通过 Grok API 执行实时 Web 搜索，返回带来源 URL 的结构化 JSON 结果。
-
-**实现方式：** 单脚本调用 Grok API (支持 chat / responses 两种端点)，自动根据模型名选择 API 类型。纯标准库实现，无第三方依赖。
-
----
-
 ## 通用架构
 
 ### 目录结构
@@ -323,7 +310,6 @@ cp config.example.json config.json
 | jlink | ✅ 已完成测试 |
 | serial | ✅ 已完成测试 |
 | net | ✅ 已完成测试 |
-| grok-search | ✅ 已完成测试 |
 | openocd | 🔧 待测试 |
 | can | 🔧 待测试 |
 

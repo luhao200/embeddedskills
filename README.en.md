@@ -1,6 +1,6 @@
 [简体中文](./README.md) | English
 
-# AI Skills — Embedded Development & Debugging Toolkit
+# embeddedskills — Embedded Development & Debugging Toolkit
 
 **Enable AI to do more than write code — let it compile, flash, and debug, completing the last mile of embedded development automation.**
 
@@ -103,7 +103,7 @@ flowchart LR
 graph TB
     AI["🤖 AI Coding Assistant<br/>(Claude Code / Copilot / TRAE)"]
 
-    subgraph skills["AI Skills Toolkit"]
+    subgraph skills["embeddedskills Toolkit"]
         direction LR
         subgraph build["Build Layer"]
             keil["keil<br/>Keil MDK Build"]
@@ -116,9 +116,6 @@ graph TB
             serial["serial<br/>Serial Debug"]
             can["can<br/>CAN Bus"]
             net["net<br/>Network Debug"]
-        end
-        subgraph ext["Auxiliary"]
-            grok["grok-search<br/>Web Search"]
         end
     end
 
@@ -151,7 +148,6 @@ graph TB
 | **serial** | Serial port scan, live monitor, data send, hex view, and logging | `scan` `monitor` `send` `hex` `log` |
 | **can** | CAN/CAN-FD interface scan, monitoring, frame sending, and DBC decoding | `scan` `monitor` `send` `log` `decode` `stats` |
 | **net** | Packet capture, pcap analysis, connectivity testing, and port scan | `iface` `capture` `analyze` `ping` `scan` `stats` |
-| **grok-search** | Real-time web search through the Grok API | — |
 
 ## Installation
 
@@ -159,10 +155,10 @@ graph TB
 
 ```bash
 # Install all skills globally
-npx skills add https://github.com/luhao200/aiskills -g -y
+npx skills add https://github.com/luhao200/embeddedskills -g -y
 
 # Install only one specific skill
-npx skills add https://github.com/luhao200/aiskills --skill jlink -g -y
+npx skills add https://github.com/luhao200/embeddedskills --skill jlink -g -y
 ```
 
 Common management commands:
@@ -177,10 +173,10 @@ npx skills remove -g    # Remove
 
 ```bash
 # Clone the repository into the skill directory (global effect)
-git clone https://github.com/luhao200/aiskills ~/.claude/skills/aiskills
+git clone https://github.com/luhao200/embeddedskills ~/.claude/skills/embeddedskills
 
 # Or use it only for the current project (under the project root)
-git clone https://github.com/luhao200/aiskills .claude/skills/aiskills
+git clone https://github.com/luhao200/embeddedskills .claude/skills/embeddedskills
 ```
 
 ### Configuration
@@ -188,7 +184,7 @@ git clone https://github.com/luhao200/aiskills .claude/skills/aiskills
 After installation, copy the `config.example.json` of the skill you want to use to `config.json`, then fill in the actual local paths and parameters:
 
 ```bash
-cd ~/.claude/skills/aiskills/jlink
+cd ~/.claude/skills/embeddedskills/jlink
 cp config.example.json config.json
 # Edit config.json and fill in the JLink.exe path, default chip model, etc.
 ```
@@ -205,7 +201,6 @@ cp config.example.json config.json
 | serial | `pip install pyserial` + USB-to-serial driver |
 | can | `pip install python-can cantools pyserial` + USB-CAN driver |
 | net | Wireshark (tshark), Npcap |
-| grok-search | Grok API key |
 
 ## Detailed Skill Descriptions
 
@@ -266,14 +261,6 @@ Interface discovery (`iface`), live packet capture (`capture`), offline pcap ana
 
 ---
 
-### grok-search — Web Search
-
-Performs real-time web search through the Grok API and returns structured JSON results with source URLs.
-
-**Implementation:** A single script calling the Grok API (supporting both chat and responses endpoints), automatically selecting the API type based on the model name. Implemented entirely with the Python standard library and no third-party dependencies.
-
----
-
 ## Common Architecture
 
 ### Directory Structure
@@ -323,7 +310,6 @@ Controlled by `operation_mode` in `config.json`:
 | jlink | ✅ Tested and completed |
 | serial | ✅ Tested and completed |
 | net | ✅ Tested and completed |
-| grok-search | ✅ Tested and completed |
 | openocd | 🔧 Pending testing |
 | can | 🔧 Pending testing |
 
