@@ -6,5 +6,6 @@
   "default_target": "target/stm32f4x.cfg",
   "gdb_port": 3333,
   "telnet_port": 4444,
+  "gdb_exe": "",
   "operation_mode": 1
 }

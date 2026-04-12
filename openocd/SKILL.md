@@ -1,17 +1,20 @@
 ---
 name: openocd
 description: >-
-  OpenOCD 下载与调试工具，用于探针探测、固件烧录、Flash 擦除、GDB Server 启动和目标复位控制。
+  OpenOCD 下载与调试工具，用于探针探测、固件烧录、Flash 擦除、GDB Server 启动、目标复位控制、
+  Telnet 在线调试（halt/resume/step/寄存器/内存/断点）、GDB 源码级调试和 Semihosting 输出捕获。
   当用户提到 OpenOCD、ST-Link、CMSIS-DAP、DAPLink、FTDI、烧录固件、擦除 Flash、GDB Server、
-  reset、interface/target/board 配置、openocd.cfg 时自动触发，也兼容 /openocd 显式调用。
-  即使用户只是说"烧录一下"、"启动 GDB Server"或"擦除芯片"，只要上下文涉及 OpenOCD 支持的
-  开源调试器（ST-Link、CMSIS-DAP、DAPLink、FTDI 等）就应触发此 skill。
-argument-hint: "[probe|flash|erase|gdb-server|reset] ..."
+  reset、interface/target/board 配置、openocd.cfg、在线调试、单步、断点、寄存器查看、
+  内存读写、semihosting 时自动触发，也兼容 /openocd 显式调用。
+  即使用户只是说"烧录一下"、"启动 GDB Server"、"擦除芯片"、"看看寄存器"、"单步调试"
+  或"抓一下 semihosting"，只要上下文涉及 OpenOCD 支持的开源调试器就应触发此 skill。
+argument-hint: "[probe|flash|erase|gdb-server|gdb|reset|halt|resume|step|reg|read-mem|write-mem|bp|rbp|run-to|semihosting] ..."
 ---
 
 # OpenOCD 下载与调试
 
-本 skill 提供 OpenOCD 的探针探测、固件烧录、Flash 擦除、GDB Server 启动和目标复位能力。
+本 skill 提供 OpenOCD 的探针探测、固件烧录、Flash 擦除、GDB Server 启动、目标复位、
+Telnet 在线调试、GDB 源码级调试和 Semihosting 输出捕获能力。
 
 ## 配置
 
@@ -26,6 +29,7 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
   "default_target": "target/stm32f4x.cfg",
   "gdb_port": 3333,
   "telnet_port": 4444,
+  "gdb_exe": "",
   "operation_mode": 1
 }
 ```
@@ -37,17 +41,48 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
 - `default_target`：默认 target 配置（如 `target/stm32f4x.cfg`）
 - `gdb_port`：GDB Server 端口，默认 3333
 - `telnet_port`：Telnet 端口，默认 4444
+- `gdb_exe`：arm-none-eabi-gdb 路径，GDB 调试子命令（run/backtrace/locals）需要
 - `operation_mode`：`1` 直接执行 / `2` 输出风险摘要但不阻塞 / `3` 执行前确认
 
 ## 子命令
+
+### 基础操作
 
 | 子命令 | 用途 | 风险 |
 |--------|------|------|
 | `probe` | 验证 board 或 interface+target 组合，探测目标连通性 | 低 |
 | `flash` | 烧录固件（.elf / .hex / .bin） | 高 |
 | `erase` | 擦除目标 Flash | 高 |
-| `gdb-server` | 启动 GDB Server，保持运行等待 GDB 连接 | 低 |
 | `reset` | 复位目标芯片 | 高 |
+
+### GDB Server
+
+| 子命令 | 用途 | 风险 |
+|--------|------|------|
+| `gdb-server` | 启动 GDB Server，保持运行等待 GDB 连接 | 低 |
+| `gdb run` | 启动 GDB Server + 执行自定义 GDB 命令序列 + 关闭 | 低 |
+| `gdb backtrace` | 快捷获取当前调用栈 | 低 |
+| `gdb locals` | 快捷查看当前帧局部变量 | 低 |
+
+### Telnet 在线调试
+
+| 子命令 | 用途 | 风险 |
+|--------|------|------|
+| `halt` | 暂停 CPU，返回 PC/xPSR | 低 |
+| `resume` | 恢复 CPU 运行 | 低 |
+| `step` | 单步执行（支持 `--count N`） | 低 |
+| `reg` | 查看所有 CPU 寄存器 | 低 |
+| `read-mem` | 读内存（`--width 8/16/32`，`--length N`） | 低 |
+| `write-mem` | 写内存（`--width 8/16/32`） | 高 |
+| `bp` | 设置硬件断点 | 低 |
+| `rbp` | 移除断点 | 低 |
+| `run-to` | 运行到指定地址（设置断点 + resume + 等待命中） | 低 |
+
+### Semihosting
+
+| 子命令 | 用途 | 风险 |
+|--------|------|------|
+| `semihosting` | 启用 ARM Semihosting 并捕获目标 printf 输出 | 低 |
 
 ## 执行流程
 
@@ -56,12 +91,12 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
 3. 已知 `board` 时优先使用 `-f board/*.cfg`，否则组合 `-f interface/*.cfg -f target/*.cfg`
 4. `board`、`interface`、`target` 同时缺失时，不自动拼接组合，直接要求用户补充
 5. 按 `operation_mode` 决定是否需要确认后执行
-6. 调用 `openocd_run.py` 或 `openocd_gdb.py`
+6. 根据子命令调用对应脚本
 7. 统一解析输出中的 `Info`、`Error` 和就绪日志，返回结构化结果
 
 ## 脚本调用
 
-skill 目录下有两个 Python 脚本，使用标准库实现，无额外依赖。
+skill 目录下有四个 Python 脚本，使用标准库实现，无额外依赖。
 
 ### openocd_run.py — 探测 / 烧录 / 擦除 / 复位
 
@@ -81,37 +116,109 @@ python <skill-dir>/scripts/openocd_run.py flash --file build/app.bin --address 0
 # 擦除 Flash（自动选择 mass/sector）
 python <skill-dir>/scripts/openocd_run.py erase --mode auto --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
 
-# 强制整片擦除
-python <skill-dir>/scripts/openocd_run.py erase --mode mass --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
-
-# 强制扇区擦除
-python <skill-dir>/scripts/openocd_run.py erase --mode sector --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
-
 # 复位目标
 python <skill-dir>/scripts/openocd_run.py reset --mode halt --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
 ```
 
 通用可选参数：`--board <cfg>`、`--search <目录>`、`--adapter-speed <kHz>`、`--transport <swd|jtag>`、`--exe <openocd路径>`
 
-- `erase` 的 `--mode` 支持 `auto|mass|sector`
-  - `auto`：优先使用 target 对应的 mass erase，未命中映射时回退 sector erase
-  - `mass`：强制整片擦除；当前 target 未配置 mass erase 命令时直接报错
-  - `sector`：强制 `flash erase_sector <bank> 0 last`
-- `reset` 的 `--mode` 仍为 `halt|run|init`
-
-### openocd_gdb.py — GDB Server 启动
+### openocd_gdb.py — GDB Server 启动与调试
 
 ```bash
-# 启动 GDB Server
+# 启动 GDB Server（保持运行）
+python <skill-dir>/scripts/openocd_gdb.py server --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 无子命令时默认 server（向后兼容）
 python <skill-dir>/scripts/openocd_gdb.py --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
 
-# 使用 board 启动
-python <skill-dir>/scripts/openocd_gdb.py --board board/stm32f4discovery.cfg --gdb-port 3333 --json
+# 执行自定义 GDB 命令序列
+python <skill-dir>/scripts/openocd_gdb.py run --gdb-exe arm-none-eabi-gdb --elf build/app.elf --interface interface/stlink.cfg --target target/stm32f4x.cfg --commands "break main" "continue" "backtrace" "info locals" --json
+
+# 快捷获取调用栈
+python <skill-dir>/scripts/openocd_gdb.py backtrace --gdb-exe arm-none-eabi-gdb --elf build/app.elf --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 快捷查看局部变量
+python <skill-dir>/scripts/openocd_gdb.py locals --gdb-exe arm-none-eabi-gdb --elf build/app.elf --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
 ```
 
-可选参数：`--gdb-port`、`--telnet-port`、`--search`、`--adapter-speed`、`--transport`
+可选参数：`--gdb-port`、`--telnet-port`、`--search`、`--adapter-speed`、`--transport`、`--board`
 
-GDB Server 启动后保持运行，脚本检测到就绪状态后返回端口信息。后续可通过 `arm-none-eabi-gdb` 连接 `localhost:<gdb-port>` 进行源码级调试。
+### openocd_telnet.py — Telnet 在线调试
+
+```bash
+# 暂停 CPU
+python <skill-dir>/scripts/openocd_telnet.py halt --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 恢复运行
+python <skill-dir>/scripts/openocd_telnet.py resume --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 单步 5 次
+python <skill-dir>/scripts/openocd_telnet.py step --count 5 --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 查看寄存器
+python <skill-dir>/scripts/openocd_telnet.py reg --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 读内存（32bit x 16 个字）
+python <skill-dir>/scripts/openocd_telnet.py read-mem --address 0x20000000 --length 16 --width 32 --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 写内存
+python <skill-dir>/scripts/openocd_telnet.py write-mem --address 0x20000000 --value 0xDEADBEEF --width 32 --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 设置硬件断点
+python <skill-dir>/scripts/openocd_telnet.py bp --address 0x08001234 --bp-length 2 --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 移除断点
+python <skill-dir>/scripts/openocd_telnet.py rbp --address 0x08001234 --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 运行到指定地址（设置断点 + resume + 等待）
+python <skill-dir>/scripts/openocd_telnet.py run-to --address 0x08001234 --timeout-ms 3000 --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+```
+
+通用可选参数：`--board`、`--search`、`--adapter-speed`、`--transport`、`--gdb-port`、`--telnet-port`
+
+### openocd_semihosting.py — Semihosting 输出捕获
+
+```bash
+# 捕获 semihosting 输出（持续到 Ctrl+C）
+python <skill-dir>/scripts/openocd_semihosting.py --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 捕获 30 秒
+python <skill-dir>/scripts/openocd_semihosting.py --timeout 30 --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+```
+
+## 调试典型工作流
+
+### 快速检查（Telnet）
+
+```
+halt -> reg -> read-mem 0x20000000 -> step -> resume
+```
+
+适合快速查看当前 CPU 状态和内存内容。
+
+### 断点调试（Telnet）
+
+```
+run-to 0x08001234 -> reg -> read-mem -> resume
+```
+
+运行到指定地址后暂停，检查寄存器和内存。
+
+### 源码级调试（GDB）
+
+```bash
+gdb run --elf app.elf --commands "break main" "continue" "backtrace" "info locals"
+```
+
+使用 ELF 文件提供符号信息，进行函数级断点和变量查看。
+
+### Semihosting 输出
+
+```bash
+semihosting
+```
+
+捕获目标通过 `printf`（SVC 指令）输出的调试信息，类似 J-Link RTT。
 
 ## 输出格式
 
@@ -121,25 +228,28 @@ GDB Server 启动后保持运行，脚本检测到就绪状态后返回端口信
 ```json
 {
   "status": "ok",
-  "action": "probe",
-  "summary": "目标探测成功",
+  "action": "halt",
+  "summary": "已暂停，PC=0x08000298",
   "details": {
-    "interface": "stlink.cfg",
-    "target": "stm32f4x.cfg"
+    "pc": "0x08000298",
+    "xpsr": "0x01000000",
+    "msp": "0x20020000",
+    "halted": true
   }
 }
 ```
 
-GDB Server 就绪示例：
+GDB 调用栈示例：
 ```json
 {
   "status": "ok",
-  "action": "gdb-server",
-  "summary": "GDB Server 已就绪",
+  "action": "backtrace",
+  "summary": "GDB backtrace 执行成功",
   "details": {
     "gdb_port": 3333,
-    "telnet_port": 4444,
-    "pid": 12345
+    "frames": [
+      {"frame": 0, "function": "main", "location": "src/main.c:42"}
+    ]
   }
 }
 ```
@@ -148,10 +258,10 @@ GDB Server 就绪示例：
 ```json
 {
   "status": "error",
-  "action": "flash",
+  "action": "halt",
   "error": {
-    "code": "cfg_not_found",
-    "message": "未找到指定的 interface 或 target 配置文件"
+    "code": "server_failed",
+    "message": "OpenOCD 启动失败或超时"
   }
 }
 ```
@@ -167,6 +277,9 @@ GDB Server 就绪示例：
 - 连接失败时给出排查建议（检查连线、供电、驱动、cfg 路径），不自动尝试更激进参数
 - 烧录、擦除、复位在参数完整且用户意图明确时直接执行
 - `gdb-server` 启动后返回端口和连接方式，进程保持运行
+- GDB 调试（run/backtrace/locals）需要配置 `gdb_exe`（arm-none-eabi-gdb 路径）
+- Telnet 调试命令每次启动独立的 OpenOCD Server，执行完自动关闭
+- Semihosting 通过 Telnet 启用后持续读取 OpenOCD stderr 输出
 - 结果回显中始终包含 cfg 组合、端口和执行动作
 
 ## 参考

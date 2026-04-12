@@ -1,6 +1,6 @@
 # openocd
 
-Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦除、GDB Server 启动和目标复位。支持 ST-Link、CMSIS-DAP、DAPLink、FTDI 等开源调试器。
+Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦除、GDB Server 启动、目标复位、Telnet 在线调试、GDB 源码级调试和 Semihosting 输出捕获。支持 ST-Link、CMSIS-DAP、DAPLink、FTDI 等开源调试器。
 
 ## 功能
 
@@ -9,12 +9,16 @@ Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦
 - Flash 擦除（支持 `auto|mass|sector` 模式）
 - GDB Server 启动（供 GDB 连接进行源码级调试）
 - 目标复位（支持 halt/run 模式）
+- **Telnet 在线调试**：halt / resume / step / 寄存器查看 / 内存读写 / 硬件断点 / run-to
+- **GDB 调试交互**：执行自定义 GDB 命令序列、快捷调用栈查看、局部变量查看
+- **Semihosting 输出捕获**：捕获目标 `printf` 输出（ARM Semihosting，类似 J-Link RTT）
 
 ## 环境要求
 
 - [OpenOCD](https://openocd.org/) — 安装后确保 `openocd` 可执行或填写完整路径
 - Python 3.x（仅标准库，无额外依赖）
 - 调试器驱动（ST-Link 需要 ST 官方驱动或 WinUSB/libusb，CMSIS-DAP 免驱）
+- [Arm GNU Toolchain](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads)（GDB 调试子命令需要 `arm-none-eabi-gdb`）
 
 ## 配置
 
@@ -29,6 +33,7 @@ Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦
   "default_target": "target/stm32f4x.cfg",
   "gdb_port": 3333,
   "telnet_port": 4444,
+  "gdb_exe": "",
   "operation_mode": 1
 }
 ```
@@ -42,6 +47,7 @@ Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦
 | `default_target` | 否 | 默认 target 配置（如 `target/stm32f4x.cfg`） |
 | `gdb_port` | 否 | GDB Server 端口，默认 3333 |
 | `telnet_port` | 否 | Telnet 端口，默认 4444 |
+| `gdb_exe` | 否 | arm-none-eabi-gdb 路径，GDB 调试子命令需要 |
 | `operation_mode` | 否 | `1` 直接执行 / `2` 输出风险摘要 / `3` 执行前确认 |
 
 > 提示：设置了 `default_board` 时，`default_interface` 和 `default_target` 可以不填。
