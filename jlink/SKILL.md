@@ -1,12 +1,12 @@
 ---
 name: jlink
 description: >-
-  J-Link 下载与在线调试工具，用于探测设备、烧录固件、读写内存、查看寄存器、复位目标、读取 RTT 日志，
+  J-Link 下载与在线调试工具，用于探测设备、烧录固件、读写内存、查看寄存器、复位目标、读取 RTT/SWO 日志，
   以及在线调试（暂停/恢复/单步/断点运行/调用栈/变量查看）。
   当用户提到 J-Link、JLink、RTT、烧录固件、写内存、读内存、寄存器查看、目标复位、探针连通性检查、
   在线调试、单步、断点、调用栈时自动触发，也兼容 /jlink 显式调用。
   即使用户只是说"烧录一下"、"看看 RTT 输出"或"调试一下"，只要上下文涉及 J-Link 探针就应触发此 skill。
-argument-hint: "[info|flash|read-mem|write-mem|regs|reset|halt|go|step|run-to|rtt|gdb] ..."
+argument-hint: "[info|flash|read-mem|write-mem|regs|reset|halt|go|step|run-to|rtt|swo|gdb] ..."
 ---
 
 # J-Link 下载与在线调试
@@ -91,7 +91,7 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
 
 ## 脚本调用
 
-skill 目录下有三个 Python 脚本，使用标准库实现，无额外依赖。
+skill 目录下有四个 Python 脚本，使用标准库实现，无额外依赖。
 
 ### jlink_exec.py — 基础操作 + 轻量调试
 
@@ -141,6 +141,20 @@ python <skill-dir>/scripts/jlink_rtt.py --device GD32F470ZG --json
 可选参数：`--serial-no`、`--channel`、`--encoding`、`--rtt-port`、`--gdbserver-exe <路径>`、`--rtt-exe <路径>`
 
 RTT 工作原理：脚本先通过 JLinkGDBServerCL.exe 建立调试连接，再启动 JLinkRTTClient.exe 读取 RTT 数据。`--json` 模式输出 JSON Lines。
+
+### jlink_swo.py — SWO 事件流包装
+
+```bash
+# 使用 config.json 里的 swo_command
+python <skill-dir>/scripts/jlink_swo.py --json
+
+# 或显式传入 viewer 命令
+python <skill-dir>/scripts/jlink_swo.py \
+  --viewer-cmd JLinkSWOViewerCL.exe -device GD32F470ZG -itf SWD -speed 4000 \
+  --json
+```
+
+`jlink_swo.py` 不直接实现 SWO 协议，而是把外部 viewer 的 stdout/stderr 统一包装成 JSON Lines，便于上层 workflow 或 AI 继续消费。
 
 ### jlink_gdb.py — GDB 源码级调试（需要 arm-none-eabi-gdb）
 

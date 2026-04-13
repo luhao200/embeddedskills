@@ -69,7 +69,7 @@ workflow                              User / AI calls directly
 | **Build** | **keil** | Keil MDK project scan, Target enumeration, build, rebuild, clean | `scan` `targets` `build` `rebuild` `clean` `flash` |
 | | **gcc** | CMake-based GCC embedded project scan, preset enumeration, configure, build, size analysis | `scan` `presets` `configure` `build` `rebuild` `clean` `size` |
 | **Debug** | **jlink** | J-Link flashing, memory/register access, RTT/SWO, on-target debugging, GDB | `info` `flash` `read-mem` `write-mem` `regs` `reset` `rtt` `swo` `halt` `go` `step` `run-to` + GDB subcommands |
-| | **openocd** | OpenOCD flashing, erase, low-level queries, GDB/Telnet debugging, semihosting/ITM | `probe` `flash` `erase` `reset` `reset-init` `targets` `raw` + GDB subcommands `semihosting` `itm` |
+| | **openocd** | OpenOCD flashing, erase, low-level queries, GDB/Telnet debugging, semihosting/ITM | `probe` `flash` `erase` `reset` `reset-init` `targets` `flash-banks` `adapter-info` `raw` `gdb-server` + GDB/Telnet subcommands `semihosting` `itm` |
 | **Comm** | **serial** | Serial port scan, live monitor, data send, hex view, logging | `scan` `monitor` `send` `hex` `log` |
 | | **can** | CAN/CAN-FD interface scan, monitoring, frame sending, DBC decoding, statistics | `scan` `monitor` `send` `log` `decode` `stats` |
 | | **net** | Packet capture, pcap analysis, connectivity testing, port scan, traffic statistics | `iface` `capture` `analyze` `ping` `scan` `stats` |
@@ -164,7 +164,7 @@ Runtime state is stored in `.embeddedskills/state.json` within the project direc
 
 ### Operation Modes
 
-Controlled by `operation_mode` in `config.json`:
+Skills with execution risk can be controlled by `operation_mode` in `config.json` (currently mainly `keil`, `gcc`, `jlink`, and `openocd`):
 
 | Mode | Description |
 |------|-------------|

@@ -2,13 +2,13 @@
 name: openocd
 description: >-
   OpenOCD 下载与调试工具，用于探针探测、固件烧录、Flash 擦除、GDB Server 启动、目标复位控制、
-  Telnet 在线调试（halt/resume/step/寄存器/内存/断点）、GDB 源码级调试和 Semihosting 输出捕获。
+  Telnet 在线调试（halt/resume/step/寄存器/内存/断点）、GDB 源码级调试，以及 Semihosting/ITM 输出捕获和底层查询。
   当用户提到 OpenOCD、ST-Link、CMSIS-DAP、DAPLink、FTDI、烧录固件、擦除 Flash、GDB Server、
   reset、interface/target/board 配置、openocd.cfg、在线调试、单步、断点、寄存器查看、
   内存读写、semihosting 时自动触发，也兼容 /openocd 显式调用。
   即使用户只是说"烧录一下"、"启动 GDB Server"、"擦除芯片"、"看看寄存器"、"单步调试"
   或"抓一下 semihosting"，只要上下文涉及 OpenOCD 支持的开源调试器就应触发此 skill。
-argument-hint: "[probe|flash|erase|gdb-server|gdb|reset|halt|resume|step|reg|read-mem|write-mem|bp|rbp|run-to|semihosting] ..."
+argument-hint: "[probe|flash|erase|reset|reset-init|targets|flash-banks|adapter-info|raw|gdb-server|gdb|halt|resume|step|reg|read-mem|write-mem|bp|rbp|run-to|semihosting|itm] ..."
 ---
 
 # OpenOCD 下载与调试
@@ -109,7 +109,7 @@ skill 目录下的 `config.json` 包含运行时配置，首次使用前确认 `
 
 ## 脚本调用
 
-skill 目录下有四个 Python 脚本，使用标准库实现，无额外依赖。
+skill 目录下有五个 Python 脚本，使用标准库实现，无额外依赖。
 
 ### openocd_run.py — 探测 / 烧录 / 擦除 / 复位
 
@@ -131,6 +131,15 @@ python <skill-dir>/scripts/openocd_run.py erase --mode auto --interface interfac
 
 # 复位目标
 python <skill-dir>/scripts/openocd_run.py reset --mode halt --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 查询 target 列表
+python <skill-dir>/scripts/openocd_run.py targets --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 查询 flash bank
+python <skill-dir>/scripts/openocd_run.py flash-banks --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 执行受控 raw 命令
+python <skill-dir>/scripts/openocd_run.py raw --interface interface/stlink.cfg --target target/stm32f4x.cfg --command "init" "targets" --json
 ```
 
 通用可选参数：`--board <cfg>`、`--search <目录>`、`--adapter-speed <kHz>`、`--transport <swd|jtag>`、`--exe <openocd路径>`
@@ -198,6 +207,21 @@ python <skill-dir>/scripts/openocd_semihosting.py --interface interface/stlink.c
 # 捕获 30 秒
 python <skill-dir>/scripts/openocd_semihosting.py --timeout 30 --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
 ```
+
+### openocd_itm.py — ITM/SWO 观测
+
+```bash
+# 使用配置中的 TPIU 参数持续读取 ITM
+python <skill-dir>/scripts/openocd_itm.py --interface interface/stlink.cfg --target target/stm32f4x.cfg --json
+
+# 指定 TPIU 名称和端口
+python <skill-dir>/scripts/openocd_itm.py \
+  --interface interface/stlink.cfg --target target/stm32f4x.cfg \
+  --tpiu-name stm32f4x.tpiu --traceclk 168000000 --pin-freq 2000000 \
+  --itm-port 0 --itm-port 1 --json
+```
+
+`openocd_itm.py` 会启动独立 OpenOCD Server，打开 TPIU/ITM 配置后，把 trace 输出统一包装成 JSON Lines。
 
 ## 调试典型工作流
 

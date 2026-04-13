@@ -69,7 +69,7 @@ workflow                              用户 / AI 直接调用
 | **构建** | **keil** | Keil MDK 工程扫描、Target 枚举、编译、重建、清理 | `scan` `targets` `build` `rebuild` `clean` `flash` |
 | | **gcc** | CMake 型 GCC 嵌入式工程扫描、preset 枚举、配置、编译、大小分析 | `scan` `presets` `configure` `build` `rebuild` `clean` `size` |
 | **调试** | **jlink** | J-Link 烧录、读写内存/寄存器、RTT/SWO、在线调试、GDB 调试 | `info` `flash` `read-mem` `write-mem` `regs` `reset` `rtt` `swo` `halt` `go` `step` `run-to` + GDB 子命令 |
-| | **openocd** | OpenOCD 烧录、擦除、底层查询、GDB/Telnet 调试、Semihosting/ITM | `probe` `flash` `erase` `reset` `reset-init` `targets` `raw` + GDB 子命令 `semihosting` `itm` |
+| | **openocd** | OpenOCD 烧录、擦除、底层查询、GDB/Telnet 调试、Semihosting/ITM | `probe` `flash` `erase` `reset` `reset-init` `targets` `flash-banks` `adapter-info` `raw` `gdb-server` + GDB/Telnet 子命令 `semihosting` `itm` |
 | **通信** | **serial** | 串口扫描、实时监控、数据发送、Hex 查看、日志 | `scan` `monitor` `send` `hex` `log` |
 | | **can** | CAN/CAN-FD 接口扫描、监控、发帧、DBC 解码、统计 | `scan` `monitor` `send` `log` `decode` `stats` |
 | | **net** | 抓包、pcap 分析、连通性测试、端口扫描、流量统计 | `iface` `capture` `analyze` `ping` `scan` `stats` |
@@ -164,7 +164,7 @@ cp config.example.json config.json
 
 ### 执行模式
 
-通过 `config.json` 中的 `operation_mode` 控制：
+带执行风险的 skill 可通过 `config.json` 中的 `operation_mode` 控制（当前主要是 `keil`、`gcc`、`jlink`、`openocd`）：
 
 | 模式 | 说明 |
 |------|------|

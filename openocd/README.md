@@ -1,6 +1,6 @@
 # openocd
 
-Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦除、GDB Server 启动、目标复位、Telnet 在线调试、GDB 源码级调试和 Semihosting 输出捕获。支持 ST-Link、CMSIS-DAP、DAPLink、FTDI 等开源调试器。
+Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦除、GDB Server 启动、目标复位、Telnet 在线调试、GDB 源码级调试以及 Semihosting/ITM 输出捕获。支持 ST-Link、CMSIS-DAP、DAPLink、FTDI 等开源调试器。
 
 ## 功能
 
@@ -12,6 +12,7 @@ Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦
 - **Telnet 在线调试**：halt / resume / step / 寄存器查看 / 内存读写 / 硬件断点 / run-to
 - **GDB 调试交互**：执行自定义 GDB 命令序列、快捷调用栈查看、局部变量查看
 - **Semihosting 输出捕获**：捕获目标 `printf` 输出（ARM Semihosting，类似 J-Link RTT）
+- **ITM/SWO 观测**：基于 TPIU/ITM 读取 SWO 输出
 
 ## 环境要求
 
@@ -51,6 +52,8 @@ Claude Code skill，通过 OpenOCD 进行探针探测、固件烧录、Flash 擦
 | `operation_mode` | 否 | `1` 直接执行 / `2` 输出风险摘要 / `3` 执行前确认 |
 
 > 提示：设置了 `default_board` 时，`default_interface` 和 `default_target` 可以不填。
+
+当前实现的基础命令还包括 `targets`、`flash-banks`、`adapter-info`、`raw` 和 `gdb-server`，观测命令除了 `semihosting` 还支持 `itm`。
 
 ## 擦除行为
 

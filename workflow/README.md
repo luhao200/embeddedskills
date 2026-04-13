@@ -7,6 +7,8 @@
 - 串联 `.embeddedskills/state.json`
 - 聚合底层脚本输出
 
+当前 `observe` 阶段会返回 `jlink:rtt`、`jlink:swo`、`openocd:semihosting`、`openocd:itm` 这几类候选观测后端。
+
 它不会重写底层构建器、烧录器或 GDB 解析逻辑。
 
 ## 命令
