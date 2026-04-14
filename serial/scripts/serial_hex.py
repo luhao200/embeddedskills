@@ -16,6 +16,7 @@ from serial_runtime import (
 )
 
 PARITY_MAP = {"none": "N", "even": "E", "odd": "O", "mark": "M", "space": "S"}
+IDLE_FLUSH_SEC = 0.2
 
 
 def output_json(obj):
@@ -42,6 +43,21 @@ def hex_dump_line(data, offset, width, show_ascii):
         ascii_part = "".join(chr(b) if 0x20 <= b < 0x7F else "." for b in data)
         line += f"  |{ascii_part}|"
     return line
+
+
+def emit_chunk(data, offset, width, show_ascii, use_json):
+    now = datetime.now().isoformat(timespec="milliseconds")
+    if use_json:
+        ascii_str = "".join(chr(b) if 0x20 <= b < 0x7F else "." for b in data)
+        output_json({
+            "timestamp": now,
+            "offset": offset,
+            "length": len(data),
+            "hex": data.hex(" "),
+            "ascii": ascii_str,
+        })
+    else:
+        print(hex_dump_line(data, offset, width, show_ascii))
 
 
 def main():
@@ -88,6 +104,7 @@ def main():
 
     try:
         ser = open_serial_port(cfg)
+        ser.timeout = 0.1
     except Exception as e:
         error_exit("connect_failed", str(e), args.json)
 
@@ -95,6 +112,8 @@ def main():
     offset = 0
     running = True
     show_ascii = not args.no_ascii
+    buffer = bytearray()
+    last_data_at = 0.0
 
     def on_signal(sig, frame):
         nonlocal running
@@ -108,30 +127,34 @@ def main():
             if args.timeout > 0 and (time.time() - start_time) >= args.timeout:
                 break
 
-            data = ser.read(args.width)
+            read_size = max(1, getattr(ser, "in_waiting", 0) or 1)
+            data = ser.read(read_size)
             if not data:
+                if buffer and last_data_at and (time.time() - last_data_at) >= IDLE_FLUSH_SEC:
+                    chunk = bytes(buffer)
+                    emit_chunk(chunk, offset, args.width, show_ascii, args.json)
+                    total_bytes += len(chunk)
+                    offset += len(chunk)
+                    buffer.clear()
                 continue
 
-            total_bytes += len(data)
-            now = datetime.now().isoformat(timespec="milliseconds")
+            buffer.extend(data)
+            last_data_at = time.time()
 
-            if args.json:
-                ascii_str = "".join(chr(b) if 0x20 <= b < 0x7F else "." for b in data)
-                output_json({
-                    "timestamp": now,
-                    "offset": offset,
-                    "length": len(data),
-                    "hex": data.hex(" "),
-                    "ascii": ascii_str,
-                })
-            else:
-                print(hex_dump_line(data, offset, args.width, show_ascii))
-
-            offset += len(data)
+            while len(buffer) >= args.width:
+                chunk = bytes(buffer[:args.width])
+                del buffer[:args.width]
+                emit_chunk(chunk, offset, args.width, show_ascii, args.json)
+                total_bytes += len(chunk)
+                offset += len(chunk)
 
     except Exception as e:
         error_exit("read_error", str(e), args.json)
     finally:
+        if buffer:
+            chunk = bytes(buffer)
+            emit_chunk(chunk, offset, args.width, show_ascii, args.json)
+            total_bytes += len(chunk)
         ser.close()
 
     duration = round(time.time() - start_time, 1)

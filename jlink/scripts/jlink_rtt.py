@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import queue
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -56,6 +58,7 @@ def start_gdbserver(
         "-noir",
         "-LocalhostOnly",
         "-nologtofile",
+        "-singlerun",
     ]
     if serial_no:
         cmd.extend(["-select", f"USB={serial_no}"])
@@ -107,15 +110,43 @@ def start_rtt_client(rtt_exe: str, rtt_port: int = 19021) -> subprocess.Popen:
 
 def cleanup(procs: list[subprocess.Popen]) -> None:
     for proc in procs:
-        if proc and proc.poll() is None:
-            try:
+        if not proc:
+            continue
+        try:
+            if proc.poll() is None:
                 if sys.platform == "win32":
                     proc.terminate()
                 else:
                     proc.send_signal(signal.SIGTERM)
                 proc.wait(timeout=5)
-            except (subprocess.TimeoutExpired, OSError):
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+        if proc.poll() is None:
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+            else:
                 proc.kill()
+
+
+def start_stream_reader(stream) -> queue.Queue:
+    line_queue: queue.Queue = queue.Queue()
+
+    def _reader() -> None:
+        try:
+            for line in iter(stream.readline, ""):
+                line_queue.put(line)
+        finally:
+            line_queue.put(None)
+
+    threading.Thread(target=_reader, daemon=True).start()
+    return line_queue
 
 
 def _state_lookup(state: dict) -> dict:
@@ -187,6 +218,7 @@ def main() -> None:
     parser.add_argument("--serial-no", default=None, help="探针序列号")
     parser.add_argument("--channel", type=int, default=0, help="RTT 通道")
     parser.add_argument("--rtt-port", type=int, default=None, help="RTT Telnet 端口")
+    parser.add_argument("--duration", type=float, default=0, help="读取时长(秒)，0=持续运行")
     parser.add_argument("--config", default=None, help="skill config.json 路径")
     parser.add_argument("--workspace", default=None, help="workspace 根目录，默认当前目录")
     parser.add_argument("--json", action="store_true", dest="as_json")
@@ -356,17 +388,24 @@ def main() -> None:
 
         rtt_proc = start_rtt_client(rtt_exe, rtt_port_value)
         procs.append(rtt_proc)
+        line_queue = start_stream_reader(rtt_proc.stdout)
 
         if not args.as_json:
             print("RTT 输出开始（Ctrl+C 退出）:", file=sys.stderr, flush=True)
             print("-" * 40, file=sys.stderr, flush=True)
 
         while True:
-            line = rtt_proc.stdout.readline()
-            if not line:
+            if args.duration > 0 and (time.time() - started_ts) >= args.duration:
+                break
+            try:
+                line = line_queue.get(timeout=0.1)
+            except queue.Empty:
                 if rtt_proc.poll() is not None:
                     break
-                time.sleep(0.02)
+                continue
+            if line is None:
+                if rtt_proc.poll() is not None:
+                    break
                 continue
 
             stripped = line.strip()

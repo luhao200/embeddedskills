@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from pathlib import Path
 from typing import Any
 
 
@@ -21,7 +22,7 @@ INTROSPECTION_ACTIONS = {
 def run_gdb_commands(gdb_exe: str, elf_file: str, target_remote: str, commands: list[str], timeout: int = 30) -> dict:
     gdb_init = ["set pagination off", "set confirm off", "set width 0"]
     if elf_file:
-        gdb_init.append(f"file {elf_file}")
+        gdb_init.append(f'file "{Path(elf_file).resolve().as_posix()}"')
     gdb_init.append(f"target remote {target_remote}")
 
     cmd = [gdb_exe, "--batch", "--nx"]
@@ -37,14 +38,31 @@ def run_gdb_commands(gdb_exe: str, elf_file: str, target_remote: str, commands: 
             encoding="utf-8",
             errors="replace",
         )
+        combined_output = "\n".join(part for part in (proc.stdout, proc.stderr) if part)
+        critical_patterns = [
+            r"No such file or directory",
+            r"No symbol table is loaded",
+            r'Function ".+?" not defined',
+            r'No symbol ".+?" in current context',
+        ]
+        has_critical_error = any(re.search(pattern, combined_output) for pattern in critical_patterns)
         return {
-            "status": "ok" if proc.returncode == 0 else "error",
-            "stdout": proc.stdout,
+            "status": "ok" if proc.returncode == 0 and not has_critical_error else "error",
+            "stdout": combined_output,
             "stderr": proc.stderr,
             "returncode": proc.returncode,
         }
-    except subprocess.TimeoutExpired:
-        return {"status": "error", "error": f"GDB 执行超时({timeout}s)"}
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        combined_output = "\n".join(part for part in (stdout, stderr) if part)
+        return {
+            "status": "timeout",
+            "stdout": combined_output,
+            "stderr": stderr,
+            "returncode": None,
+            "error": f"GDB 执行超时({timeout}s)",
+        }
     except Exception as exc:  # pragma: no cover - 兜底异常
         return {"status": "error", "error": str(exc)}
 

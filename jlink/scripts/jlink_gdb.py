@@ -230,6 +230,8 @@ def resolve_device_params(args, project_config: dict, state_lookup: dict) -> dic
 
 
 def _summary(command: str, parsed: dict) -> str:
+    if command == "continue" and parsed.get("timed_out"):
+        return "continue 已执行，目标在超时窗口内未停下"
     if command == "backtrace" and parsed.get("frames"):
         return f"backtrace 完成，frames={len(parsed['frames'])}"
     if command == "locals" and parsed.get("variables"):
@@ -437,7 +439,55 @@ def main() -> None:
 
         gdb_result = run_gdb_commands(gdb_exe, elf_file or "", f"localhost:{gdb_port}", gdb_commands)
         elapsed_ms = (time.time() - started_ts) * 1000
-        if gdb_result["status"] == "error":
+        if gdb_result["status"] == "timeout" and args.command == "continue":
+            parsed = parse_gdb_output(gdb_result.get("stdout", ""), args.command)
+            parsed["timed_out"] = True
+            artifacts = build_artifacts(debug_file=elf_file)
+            state_info = update_state_entry(
+                "last_debug",
+                {
+                    "provider": "jlink",
+                    "action": args.command,
+                    "device": device,
+                    "interface": interface or "SWD",
+                    "speed": speed or "4000",
+                    "serial_no": serial_no or "",
+                    "debug_file": elf_file or "",
+                    "artifacts": artifacts,
+                },
+                str(workspace),
+            )
+            save_project_config(str(workspace), {
+                "device": device,
+                "interface": interface or "SWD",
+                "speed": speed or "4000",
+            })
+            result = make_result(
+                status="ok",
+                action=args.command,
+                summary=_summary(args.command, parsed),
+                details={
+                    "device": device,
+                    "gdb_port": gdb_port,
+                    "commands": gdb_commands,
+                    "output": parsed.get("output", ""),
+                    "server_output": server_output,
+                    "returncode": gdb_result.get("returncode", 0),
+                    **{key: value for key, value in parsed.items() if key != "output"},
+                },
+                context=parameter_context(
+                    provider="jlink",
+                    workspace=str(workspace),
+                    parameter_sources=parameter_sources,
+                    config_path=config_path,
+                ),
+                artifacts=artifacts,
+                metrics=_metrics(parsed),
+                state=state_info,
+                next_actions=["目标已继续运行，如需停下请再次执行 halt/backtrace/run"],
+                timing=make_timing(started_at, elapsed_ms),
+            )
+        elif gdb_result["status"] == "error" or gdb_result["status"] == "timeout":
             result = make_result(
                 status="error",
                 action=args.command,

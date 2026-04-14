@@ -18,6 +18,7 @@ from serial_runtime import (
 )
 
 PARITY_MAP = {"none": "N", "even": "E", "odd": "O", "mark": "M", "space": "S"}
+IDLE_FLUSH_SEC = 0.2
 
 
 def output_json(obj):
@@ -33,6 +34,30 @@ def error_exit(action, code, message, use_json):
     else:
         print(f"错误: {message}", file=sys.stderr)
     sys.exit(1)
+
+
+def emit_line(text, cfg, args, include_re, exclude_re):
+    if include_re:
+        try:
+            if not include_re.search(text):
+                return False
+        except Exception:
+            pass
+
+    if exclude_re:
+        try:
+            if exclude_re.search(text):
+                return False
+        except Exception:
+            pass
+
+    now = datetime.now().isoformat(timespec="milliseconds")
+    if args.json:
+        output_json({"timestamp": now, "port": cfg["port"], "baudrate": cfg["baudrate"], "text": text})
+    else:
+        prefix = f"[{now}] " if args.timestamp else ""
+        print(f"{prefix}{text}")
+    return True
 
 
 def main():
@@ -94,6 +119,7 @@ def main():
 
     try:
         ser = open_serial_port(cfg)
+        ser.timeout = 0.1
     except Exception as e:
         error_exit("monitor", "connect_failed", str(e), args.json)
 
@@ -108,48 +134,52 @@ def main():
     signal.signal(signal.SIGTERM, on_signal)
 
     encoding = cfg.get("encoding", "utf-8")
+    text_buffer = ""
+    last_data_at = 0.0
+    skip_leading_lf = False
 
     try:
         while running:
             if args.timeout > 0 and (time.time() - start_time) >= args.timeout:
                 break
 
-            raw = ser.readline()
+            read_size = max(1, getattr(ser, "in_waiting", 0) or 1)
+            raw = ser.read(read_size)
             if not raw:
+                if text_buffer and last_data_at and (time.time() - last_data_at) >= IDLE_FLUSH_SEC:
+                    if emit_line(text_buffer, cfg, args, include_re, exclude_re):
+                        line_count += 1
+                    text_buffer = ""
                 continue
 
             try:
-                text = raw.decode(encoding, errors="replace").rstrip("\r\n")
+                chunk = raw.decode(encoding, errors="replace")
             except Exception:
-                text = raw.hex()
+                chunk = raw.hex()
+            if skip_leading_lf and chunk.startswith("\n"):
+                chunk = chunk[1:]
+            skip_leading_lf = chunk.endswith("\r")
+            text_buffer += chunk.replace("\r\n", "\n").replace("\r", "\n")
+            last_data_at = time.time()
 
-            if include_re:
-                try:
-                    if not include_re.search(text):
-                        continue
-                except Exception:
-                    pass
-
-            if exclude_re:
-                try:
-                    if exclude_re.search(text):
-                        continue
-                except Exception:
-                    pass
-
-            line_count += 1
-            now = datetime.now().isoformat(timespec="milliseconds")
-
-            if args.json:
-                output_json({"timestamp": now, "port": cfg["port"],
-                             "baudrate": cfg["baudrate"], "text": text})
+            parts = text_buffer.split("\n")
+            if text_buffer.endswith("\n"):
+                complete_lines = parts[:-1]
+                text_buffer = ""
             else:
-                prefix = f"[{now}] " if args.timestamp else ""
-                print(f"{prefix}{text}")
+                complete_lines = parts[:-1]
+                text_buffer = parts[-1]
+
+            for text in complete_lines:
+                if emit_line(text, cfg, args, include_re, exclude_re):
+                    line_count += 1
 
     except Exception as e:
         error_exit("monitor", "read_error", str(e), args.json)
     finally:
+        if text_buffer:
+            if emit_line(text_buffer, cfg, args, include_re, exclude_re):
+                line_count += 1
         ser.close()
 
     duration = round(time.time() - start_time, 1)

@@ -83,7 +83,7 @@ def main():
     log_dir = cfg["log_dir"]
     if not args.output:
         os.makedirs(log_dir, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         ext = {"text": "log", "csv": "csv", "json": "jsonl"}[args.format]
         args.output = os.path.join(log_dir, f"serial_{ts}.{ext}")
 

@@ -334,7 +334,12 @@ ALL_ACTIONS = [
 
 
 def resolve_device_params(args):
-    """解析 device/interface/speed 参数，优先级: CLI > 工程配置 > state.json"""
+    """解析 exe/device/interface/speed/serial_no 参数。
+
+    优先级:
+    - exe / serial_no: CLI > 环境级配置
+    - device / interface / speed: CLI > 工程配置 > state.json > 默认值
+    """
     workspace = workspace_root(args.workspace)
     local_config = load_local_config(__file__)
     project_config = load_project_config(str(workspace))
@@ -380,13 +385,36 @@ def resolve_device_params(args):
         speed = "4000"
         speed_source = "default"
 
+    # exe: CLI > 环境级配置
+    exe = args.exe
+    exe_source = "cli"
+    if is_missing(exe):
+        exe = local_config.get("exe", "")
+        exe_source = "config" if not is_missing(exe) else ""
+    if not is_missing(exe):
+        exe = normalize_path(str(exe))
+
+    # serial_no: CLI > 环境级配置 > state
+    serial_no = args.serial_no
+    serial_no_source = "cli"
+    if is_missing(serial_no):
+        serial_no = local_config.get("serial_no", "")
+        serial_no_source = "config" if not is_missing(serial_no) else ""
+    if is_missing(serial_no):
+        serial_no = last_flash.get("serial_no") or last_debug.get("serial_no") or ""
+        serial_no_source = "state" if not is_missing(serial_no) else ""
+
     return {
+        "exe": exe,
+        "exe_source": exe_source,
         "device": device,
         "device_source": device_source,
         "interface": interface,
         "interface_source": interface_source,
         "speed": speed,
         "speed_source": speed_source,
+        "serial_no": serial_no,
+        "serial_no_source": serial_no_source,
     }
 
 
@@ -472,12 +500,12 @@ def main():
         sys.exit(1)
 
     result = run_jlink(
-        exe=args.exe,
+        exe=params["exe"],
         device=params["device"],
         action=args.action,
         interface=params["interface"],
         speed=params["speed"],
-        serial_no=args.serial_no,
+        serial_no=params["serial_no"],
         file=args.file,
         address=args.address,
         length=args.length,
@@ -505,7 +533,7 @@ def main():
                     "device": params["device"],
                     "interface": params["interface"],
                     "speed": params["speed"],
-                    "serial_no": args.serial_no or "",
+                    "serial_no": params["serial_no"] or "",
                 },
                 str(workspace),
             )
@@ -515,9 +543,11 @@ def main():
         if "details" not in result:
             result["details"] = {}
         result["details"]["parameter_sources"] = {
+            "exe": params["exe_source"],
             "device": params["device_source"],
             "interface": params["interface_source"],
             "speed": params["speed_source"],
+            "serial_no": params["serial_no_source"],
         }
         output_json(result)
     else:

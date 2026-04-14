@@ -57,6 +57,22 @@ ACTION_FLAG = {
     "flash": "-f",
 }
 
+UV4_TIMEOUT_SEC = 1800
+
+GENERATED_OUTPUT_SUFFIXES = {
+    ".axf",
+    ".elf",
+    ".hex",
+    ".bin",
+    ".o",
+    ".d",
+    ".crf",
+    ".dep",
+    ".htm",
+    ".lnp",
+    ".iex",
+}
+
 
 def parse_log(log_path: str) -> dict:
     metrics = {"errors": 0, "warnings": 0, "flash_bytes": 0, "ram_bytes": 0}
@@ -187,6 +203,70 @@ def _collect_target_artifacts(project_path: Path, target: str) -> dict:
     return details
 
 
+def _target_common_option(project_path: Path, target: str) -> tuple[Path | None, str]:
+    if project_path.suffix.lower() != ".uvprojx":
+        return None, ""
+
+    try:
+        root = ET.parse(str(project_path)).getroot()
+    except (ET.ParseError, OSError):
+        return None, ""
+
+    target_el = None
+    fallback_target = None
+    for item in root.iter("Target"):
+        name_el = item.find("TargetName")
+        if name_el is None or not name_el.text:
+            continue
+        if fallback_target is None:
+            fallback_target = item
+        if target and name_el.text.strip() == target:
+            target_el = item
+            break
+
+    if target_el is None:
+        target_el = fallback_target
+    if target_el is None:
+        return None, ""
+
+    common = target_el.find("TargetOption/TargetCommonOption")
+    if common is None:
+        return None, ""
+
+    output_dir = _resolve_path(project_path.parent, common.findtext("OutputDirectory", default=""))
+    output_name = common.findtext("OutputName", default="").strip() or project_path.stem
+    return output_dir if output_dir.exists() else None, output_name
+
+
+def _cleanup_generated_outputs(project_path: Path, target: str) -> dict:
+    output_dir, output_name = _target_common_option(project_path, target)
+    if output_dir is None:
+        return {}
+
+    removed: list[str] = []
+    prefix = output_name.lower()
+    for item in output_dir.iterdir():
+        if not item.is_file():
+            continue
+        suffix = item.suffix.lower()
+        name = item.name.lower()
+        should_remove = suffix in GENERATED_OUTPUT_SUFFIXES or name.startswith(prefix)
+        if not should_remove:
+            continue
+        try:
+            item.unlink()
+            removed.append(str(item.resolve()))
+        except OSError:
+            continue
+
+    details: dict[str, object] = {
+        "output_dir": str(output_dir.resolve()),
+        "removed_files": removed,
+        "removed_count": len(removed),
+    }
+    return details
+
+
 def _build_summary(action: str, status: str, metrics: dict) -> str:
     errors = metrics.get("errors", 0)
     warnings = metrics.get("warnings", 0)
@@ -204,6 +284,38 @@ def _next_actions(action: str, artifacts: dict) -> list[str]:
     if action in ("build", "rebuild") and artifacts.get("debug_file"):
         actions.append("可直接复用 artifacts.debug_file 继续 gdb 调试")
     return actions
+
+
+def _extract_uv4_error(action: str, proc: subprocess.CompletedProcess[str], log_file: Path, errorlevel_desc: str) -> dict:
+    log_tail = ""
+    if log_file.exists():
+        try:
+            lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+            log_tail = "\n".join(lines[-40:])
+        except OSError:
+            log_tail = ""
+
+    combined = "\n".join(part for part in (proc.stdout, proc.stderr, log_tail) if part).strip()
+    if action == "flash":
+        flash_failed = re.search(r"(Flash Download failed\s+-\s+.+)", combined, re.IGNORECASE)
+        if flash_failed:
+            return {"code": "flash_failed", "message": flash_failed.group(1).strip()}
+        if re.search(r"Programming Failed!", combined, re.IGNORECASE):
+            return {"code": "flash_failed", "message": "Programming Failed"}
+
+    patterns = [
+        (r"\*\*\*\s*error\s+\d+:\s+(.+)", "uv4_error"),
+        (r"Error:\s+(.+)", "uv4_error"),
+    ]
+    for pattern, code in patterns:
+        match = re.search(pattern, combined, re.IGNORECASE)
+        if match:
+            return {"code": code, "message": match.group(1).strip()}
+
+    return {
+        "code": f"{action}_failed",
+        "message": errorlevel_desc or "UV4 执行失败",
+    }
 
 
 def run_uv4(uv4_exe: str, action: str, project: str, target: str, log_dir: str, clean_first: bool = False) -> dict:
@@ -235,12 +347,20 @@ def run_uv4(uv4_exe: str, action: str, project: str, target: str, log_dir: str, 
         cmd.extend(["-t", target])
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=UV4_TIMEOUT_SEC,
+            cwd=str(project_path.parent),
+            encoding="utf-8",
+            errors="replace",
+        )
     except subprocess.TimeoutExpired:
         return {
             "status": "error",
             "action": action,
-            "error": {"code": "timeout", "message": "UV4.exe 执行超时(600s)"},
+            "error": {"code": "timeout", "message": f"UV4.exe 执行超时({UV4_TIMEOUT_SEC}s)"},
         }
     except Exception as exc:  # pragma: no cover - 兜底异常
         return {
@@ -249,23 +369,35 @@ def run_uv4(uv4_exe: str, action: str, project: str, target: str, log_dir: str, 
             "error": {"code": "exec_error", "message": str(exc)},
         }
 
+    if action == "clean":
+        cleanup_details = _cleanup_generated_outputs(project_path, target)
+    else:
+        cleanup_details = {}
+
     metrics = parse_log(str(log_file))
     _, errorlevel_desc = ERRORLEVEL_MAP.get(proc.returncode, ("error", f"未知返回码: {proc.returncode}"))
     status = "error" if proc.returncode >= 2 or metrics["errors"] > 0 else "ok"
 
-    return {
+    details = {
+        "project": str(project_path),
+        "target": target,
+        "log_file": str(log_file.resolve()),
+        "errorlevel": proc.returncode,
+        "errorlevel_desc": errorlevel_desc,
+        **_collect_target_artifacts(project_path, target),
+        **cleanup_details,
+    }
+
+    result = {
         "status": status,
         "action": action,
         "metrics": metrics,
-        "details": {
-            "project": str(project_path),
-            "target": target,
-            "log_file": str(log_file.resolve()),
-            "errorlevel": proc.returncode,
-            "errorlevel_desc": errorlevel_desc,
-            **_collect_target_artifacts(project_path, target),
-        },
+        "details": details,
     }
+    if status == "error":
+        result["error"] = _extract_uv4_error(action, proc, log_file, errorlevel_desc)
+
+    return result
 
 
 def check_last_build_ok(log_dir: str, project: str, target: str) -> bool:
