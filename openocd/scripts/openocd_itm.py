@@ -101,6 +101,13 @@ def start_openocd_server(cmd: list[str]) -> subprocess.Popen:
 def wait_server_ready(proc: subprocess.Popen, trace_port: int, timeout: int = 15) -> tuple[bool, list[str]]:
     started = time.time()
     lines: list[str] = []
+    ready = False
+    ready_deadline = 0.0
+    critical_keywords = [
+        "error:",
+        "failed to start adapter's trace",
+        "not supported by the device",
+    ]
     while time.time() - started < timeout:
         if proc.poll() is not None:
             lines.extend(proc.stderr.read().splitlines())
@@ -108,12 +115,18 @@ def wait_server_ready(proc: subprocess.Popen, trace_port: int, timeout: int = 15
         line = proc.stderr.readline()
         if not line:
             time.sleep(0.1)
+            if ready and time.time() >= ready_deadline:
+                return True, lines
             continue
         stripped = line.strip()
         lines.append(stripped)
-        if f"port {trace_port}" in stripped.lower() or "trace data" in stripped.lower():
-            return True, lines
-    return True, lines
+        lowered = stripped.lower()
+        if any(keyword in lowered for keyword in critical_keywords):
+            return False, lines
+        if f"port {trace_port}" in lowered or "trace data" in lowered:
+            ready = True
+            ready_deadline = time.time() + 1.0
+    return ready, lines
 
 
 def cleanup(proc: subprocess.Popen | None) -> None:
@@ -364,8 +377,21 @@ def main() -> None:
                 print(f"错误: {message}", file=sys.stderr)
             sys.exit(1)
 
-        trace_sock = socket.create_connection(("127.0.0.1", args.trace_port), timeout=5.0)
-        trace_sock.settimeout(0.5)
+        last_trace_error: OSError | None = None
+        trace_deadline = time.time() + 5.0
+        while time.time() < trace_deadline:
+            try:
+                trace_sock = socket.create_connection(("127.0.0.1", args.trace_port), timeout=1.0)
+                trace_sock.settimeout(0.5)
+                last_trace_error = None
+                break
+            except OSError as exc:
+                last_trace_error = exc
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.2)
+        if trace_sock is None:
+            raise OSError(last_trace_error or "trace socket not ready")
 
         update_state_entry(
             "last_observe",

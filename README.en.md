@@ -4,7 +4,24 @@
 
 **Give AI coding assistants direct control over compilers, debuggers, and communication buses — completing the last mile of embedded development automation.**
 
+![Repo](https://img.shields.io/badge/Repo-GitHub-181717?style=flat-square&logo=github)
+![Type](https://img.shields.io/badge/type-open--source%20skill-black?style=flat-square)
+![Status](https://img.shields.io/badge/status-active-success?style=flat-square)
+
+<p>
+  <img src="https://img.shields.io/badge/Claude_Code-black?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code">
+  <img src="https://img.shields.io/badge/OpenAI_Codex_CLI-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI Codex CLI">
+  <img src="https://img.shields.io/badge/Cursor-000?style=flat-square&logo=cursor&logoColor=white" alt="Cursor">
+  <img src="https://img.shields.io/badge/Kiro-232F3E?style=flat-square&logo=amazon&logoColor=white" alt="Kiro">
+  <img src="https://img.shields.io/badge/OpenClaw-FF6B35?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJMNCA3djEwbDggNSA4LTV2LTEweiIgZmlsbD0id2hpdGUiLz48L3N2Zz4=&logoColor=white" alt="OpenClaw">
+  <img src="https://img.shields.io/badge/Antigravity-4285F4?style=flat-square&logo=google&logoColor=white" alt="Google Antigravity">
+  <img src="https://img.shields.io/badge/OpenCode-00D4AA?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTkuNCA1LjJMMyAxMmw2LjQgNi44TTIxIDEybC02LjQtNi44TTE0LjYgMTguOCIgc3Ryb2tlPSJ3aGl0ZSIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+&logoColor=white" alt="OpenCode">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License">
+</p>
+
 Compatible with Claude Code, Copilot, TRAE, and other AI coding assistants that support the Skill protocol.
+
+If you find the project helpful, please give it a free 🌟.
 
 ## Motivation
 
@@ -252,9 +269,9 @@ Skills with execution risk can be controlled by `operation_mode` in `config.json
 | gcc | ✅ Tested |
 | jlink | ✅ Tested |
 | serial | ✅ Tested |
-| net | ✅ Tested |
+| net | 🔧 Pending test |
 | openocd | ✅ Tested |
-| workflow | 🔧 Pending test |
+| workflow | ✅ Tested |
 | can | 🔧 Pending test |
 
 ## License

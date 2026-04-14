@@ -10,8 +10,10 @@ from typing import Any
 INTROSPECTION_ACTIONS = {
     "backtrace",
     "locals",
+    "break",
     "frame",
     "print",
+    "watch",
     "threads",
     "disassemble",
     "crash-report",
@@ -69,7 +71,7 @@ def build_gdb_commands(action: str, expr: str | None = None, *, halt_before: boo
     elif action == "break":
         commands.extend([f"break {require_action_expr(action, expr, '--expr')}", "info breakpoints"])
     elif action == "continue":
-        commands.append("continue")
+        commands.append("monitor resume")
     elif action == "next":
         commands.append("next")
     elif action == "step":

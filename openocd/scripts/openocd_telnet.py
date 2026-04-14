@@ -260,6 +260,21 @@ def parse_mem_response(raw: str) -> list:
     return memory
 
 
+def has_command_error(raw: str) -> bool:
+    """识别 OpenOCD Telnet 返回中的失败语义。"""
+    lowered = raw.lower()
+    keywords = [
+        "error:",
+        "failed",
+        "not halted",
+        "context restore failed",
+        "target not halted",
+        "timed out",
+        "unknown command",
+    ]
+    return any(keyword in lowered for keyword in keywords)
+
+
 # ── 主逻辑 ────────────────────────────────────────────────────
 
 def output_json(data: dict):
@@ -513,6 +528,18 @@ def execute_action(telnet: TelnetConnection, args) -> dict:
 
     elif action == "resume":
         raw = telnet.send("resume")
+        lowered = raw.lower()
+        if "not halted" in lowered and "context restore failed" in lowered:
+            return {
+                "status": "ok", "action": "resume",
+                "summary": "目标已在运行",
+                "details": {"response": raw, "already_running": True},
+            }
+        if has_command_error(raw):
+            return {
+                "status": "error", "action": "resume",
+                "error": {"code": "resume_failed", "message": raw or "resume 执行失败"},
+            }
         return {
             "status": "ok", "action": "resume",
             "summary": "已恢复运行",
@@ -573,7 +600,7 @@ def execute_action(telnet: TelnetConnection, args) -> dict:
         cmd = f"{width_cmd[args.width]} {args.address} {args.value}"
         raw = telnet.send(cmd)
         # 检查是否有错误
-        if "error" in raw.lower():
+        if has_command_error(raw):
             return {
                 "status": "error", "action": "write-mem",
                 "error": {"code": "write_failed", "message": raw},
@@ -587,7 +614,7 @@ def execute_action(telnet: TelnetConnection, args) -> dict:
     elif action == "bp":
         cmd = f"bp {args.address} {args.bp_length} hw"
         raw = telnet.send(cmd)
-        if "error" in raw.lower() or "failed" in raw.lower():
+        if has_command_error(raw):
             return {
                 "status": "error", "action": "bp",
                 "error": {"code": "bp_set_failed", "message": f"断点设置失败: {raw}"},
@@ -601,6 +628,11 @@ def execute_action(telnet: TelnetConnection, args) -> dict:
     elif action == "rbp":
         cmd = f"rbp {args.address}"
         raw = telnet.send(cmd)
+        if has_command_error(raw):
+            return {
+                "status": "error", "action": "rbp",
+                "error": {"code": "bp_remove_failed", "message": f"断点移除失败: {raw}"},
+            }
         return {
             "status": "ok", "action": "rbp",
             "summary": f"断点已移除 @ {args.address}",
@@ -609,14 +641,22 @@ def execute_action(telnet: TelnetConnection, args) -> dict:
 
     elif action == "run-to":
         # 设置断点 -> resume -> 等待 -> halt -> 查 PC -> 移除断点
+        telnet.send("halt")
+        time.sleep(0.1)
         bp_raw = telnet.send(f"bp {args.address} {args.bp_length} hw")
-        if "error" in bp_raw.lower() or "failed" in bp_raw.lower():
+        if has_command_error(bp_raw):
             return {
                 "status": "error", "action": "run-to",
                 "error": {"code": "bp_set_failed", "message": f"断点设置失败: {bp_raw}"},
             }
 
-        telnet.send("resume")
+        resume_raw = telnet.send("resume")
+        if has_command_error(resume_raw):
+            telnet.send(f"rbp {args.address}")
+            return {
+                "status": "error", "action": "run-to",
+                "error": {"code": "resume_failed", "message": f"run-to 恢复失败: {resume_raw}"},
+            }
         timeout_s = args.timeout_ms / 1000.0
         time.sleep(timeout_s)
 

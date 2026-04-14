@@ -419,9 +419,13 @@ def main() -> None:
                 args.gdb_exe,
                 config=config,
                 config_keys=["gdb_exe"],
-                required=True,
                 normalize_as_path=True,
             )
+            if is_missing(gdb_exe) and not is_missing(project_config.get("gdb_exe")):
+                gdb_exe = normalize_path(project_config.get("gdb_exe"))
+                parameter_sources["gdb_exe"] = "project_config:gdb_exe"
+            if is_missing(gdb_exe):
+                raise ValueError("缺少必要参数: gdb_exe")
             elf_file, parameter_sources["elf"] = resolve_param(
                 "elf",
                 args.elf,

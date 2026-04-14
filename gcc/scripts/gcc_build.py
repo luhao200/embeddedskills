@@ -347,14 +347,16 @@ def main() -> None:
 
     parameter_sources: dict[str, str] = {}
     try:
-        # cmake_exe: CLI > 环境级配置 > 必需
+        # cmake_exe: CLI > 环境级配置 > PATH 默认值(cmake)
         cmake_exe, parameter_sources["cmake"] = resolve_param(
             "cmake",
             args.cmake,
             config=local_config,
             config_keys=["cmake_exe"],
-            required=True,
         )
+        if is_missing(cmake_exe):
+            cmake_exe = "cmake"
+            parameter_sources["cmake"] = "default:path:cmake"
         
         # project: CLI > 环境级配置 > 工程级配置 > state.json > 必需
         project, parameter_sources["project"] = resolve_param(
@@ -362,8 +364,9 @@ def main() -> None:
             args.project,
             config=local_config,
             config_keys=["default_project"],
-            normalize_as_path=True,
         )
+        if not is_missing(project):
+            project = _resolve_project_path(workspace, str(project))
         # 工程级配置（优先于 state）
         if is_missing(project) and not is_missing(project_config.get("project")):
             project = _resolve_project_path(workspace, project_config.get("project"))

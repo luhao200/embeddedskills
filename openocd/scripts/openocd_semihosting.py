@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import queue
 import re
 import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -440,28 +442,55 @@ def main() -> None:
             print("Semihosting 已启用，等待输出（Ctrl+C 退出）:", file=sys.stderr, flush=True)
             print("-" * 40, file=sys.stderr, flush=True)
 
+        line_queue: queue.SimpleQueue[str | None] = queue.SimpleQueue()
+
+        def _stderr_reader() -> None:
+            try:
+                while True:
+                    line = proc.stderr.readline()
+                    if not line:
+                        break
+                    line_queue.put(line)
+            finally:
+                line_queue.put(None)
+
+        threading.Thread(target=_stderr_reader, daemon=True).start()
         monitor_started = time.time()
+        stream_closed = False
         while True:
             if args.timeout > 0 and (time.time() - monitor_started) >= args.timeout:
                 break
 
             if proc.poll() is not None:
-                remaining = proc.stderr.read()
-                for line in remaining.splitlines(keepends=True):
-                    if is_semihosting_line(line):
-                        emit_stream_record(
-                            source="openocd",
-                            channel_type="semihosting",
-                            text=line,
-                            as_json=args.as_json,
-                            stream_type="text",
-                        )
                 break
 
-            line = proc.stderr.readline()
-            if not line:
+            try:
+                line = line_queue.get_nowait()
+            except queue.Empty:
                 time.sleep(0.02)
                 continue
+
+            if line is None:
+                stream_closed = True
+                time.sleep(0.02)
+                continue
+            if is_semihosting_line(line):
+                emit_stream_record(
+                    source="openocd",
+                    channel_type="semihosting",
+                    text=line,
+                    as_json=args.as_json,
+                    stream_type="text",
+                )
+
+        while True:
+            try:
+                line = line_queue.get_nowait()
+            except queue.Empty:
+                break
+            if line is None:
+                stream_closed = True
+                break
             if is_semihosting_line(line):
                 emit_stream_record(
                     source="openocd",
