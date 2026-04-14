@@ -7,6 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from gcc_runtime import hidden_subprocess_kwargs
+
 
 def _find_size_tool(toolchain_prefix: str, toolchain_path: str) -> str:
     """拼接 size 工具的完整路径"""
@@ -22,6 +28,7 @@ def _run_size(size_exe: str, elf: str, fmt: str) -> str:
     proc = subprocess.run(
         cmd, capture_output=True, text=True, timeout=30,
         encoding="utf-8", errors="replace",
+        **hidden_subprocess_kwargs(),
     )
     if proc.returncode != 0:
         raise RuntimeError(f"size 执行失败: {proc.stderr.strip()}")

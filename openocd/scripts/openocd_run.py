@@ -19,6 +19,7 @@ from openocd_runtime import (  # noqa: E402
     build_artifacts,
     default_config_path,
     get_state_entry,
+    hidden_subprocess_kwargs,
     is_missing,
     load_json_file,
     load_local_config,
@@ -280,6 +281,7 @@ def run_openocd(
             timeout=120,
             encoding="utf-8",
             errors="replace",
+            **hidden_subprocess_kwargs(),
         )
     except FileNotFoundError:
         return {"status": "error", "action": action, "error": {"code": "exe_not_found", "message": f"openocd 不存在或不在 PATH 中: {exe}"}}

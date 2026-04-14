@@ -20,6 +20,7 @@ from gcc_runtime import (  # noqa: E402
     build_artifacts,
     default_config_path,
     get_state_entry,
+    hidden_subprocess_kwargs,
     is_missing,
     load_json_file,
     load_local_config,
@@ -157,6 +158,7 @@ def run_configure(cmake_exe: str, project: str, preset: str, log_dir: str) -> di
             cwd=str(project_path),
             encoding="utf-8",
             errors="replace",
+            **hidden_subprocess_kwargs(),
         )
     except subprocess.TimeoutExpired:
         return _error("configure", "timeout", "cmake 配置超时(300s)")
@@ -208,6 +210,7 @@ def run_build(cmake_exe: str, project: str, preset: str, log_dir: str) -> dict:
             cwd=str(project_path),
             encoding="utf-8",
             errors="replace",
+            **hidden_subprocess_kwargs(),
         )
     except subprocess.TimeoutExpired:
         return _error("build", "timeout", "构建超时(600s)")
@@ -275,6 +278,7 @@ def run_clean(cmake_exe: str, project: str, preset: str, log_dir: str) -> dict:
                 timeout=120,
                 encoding="utf-8",
                 errors="replace",
+                **hidden_subprocess_kwargs(),
             )
             if proc.returncode == 0:
                 return {

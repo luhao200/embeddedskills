@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
+from pathlib import Path
 from typing import Any
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from openocd_runtime import hidden_subprocess_kwargs
 
 
 INTROSPECTION_ACTIONS = {
@@ -38,6 +47,7 @@ def run_gdb_commands(gdb_exe: str, elf_file: str, target_remote: str, commands: 
             timeout=timeout,
             encoding="utf-8",
             errors="replace",
+            **hidden_subprocess_kwargs(),
         )
         return {
             "status": "ok" if proc.returncode == 0 else "error",

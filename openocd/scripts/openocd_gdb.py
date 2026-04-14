@@ -20,6 +20,7 @@ from openocd_runtime import (  # noqa: E402
     build_artifacts,
     default_config_path,
     get_state_entry,
+    hidden_subprocess_kwargs,
     is_missing,
     load_json_file,
     load_local_config,
@@ -89,6 +90,10 @@ def build_openocd_cmd(
 
 
 def start_openocd_server(cmd: list[str]) -> subprocess.Popen:
+    popen_kwargs = hidden_subprocess_kwargs()
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+    if popen_kwargs.get("creationflags"):
+        creationflags |= popen_kwargs["creationflags"]
     return subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -96,7 +101,8 @@ def start_openocd_server(cmd: list[str]) -> subprocess.Popen:
         text=True,
         encoding="utf-8",
         errors="replace",
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+        creationflags=creationflags,
+        startupinfo=popen_kwargs.get("startupinfo"),
     )
 
 

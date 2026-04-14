@@ -21,6 +21,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from openocd_runtime import (
+    hidden_subprocess_kwargs,
     load_project_config,
     save_project_config,
     load_workspace_state,
@@ -57,6 +58,10 @@ def build_openocd_cmd(exe: str, board: str = "", interface: str = "", target: st
 
 def start_openocd_server(cmd: list) -> subprocess.Popen:
     """启动 OpenOCD 进程"""
+    popen_kwargs = hidden_subprocess_kwargs()
+    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+    if popen_kwargs.get("creationflags"):
+        creationflags |= popen_kwargs["creationflags"]
     return subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -64,7 +69,8 @@ def start_openocd_server(cmd: list) -> subprocess.Popen:
         text=True,
         encoding="utf-8",
         errors="replace",
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+        creationflags=creationflags,
+        startupinfo=popen_kwargs.get("startupinfo"),
     )
 
 
