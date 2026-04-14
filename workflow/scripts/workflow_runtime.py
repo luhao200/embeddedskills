@@ -13,6 +13,7 @@ STATE_DIR_NAME = ".embeddedskills"
 STATE_FILE_NAME = "state.json"
 PROJECT_CONFIG_FILE_NAME = "config.json"
 SKILL_NAME = "workflow"
+LEGACY_WORKFLOW_KEYS = {"preferred_build", "preferred_flash", "preferred_debug", "preferred_observe"}
 
 
 def now_iso() -> str:
@@ -88,6 +89,50 @@ def load_full_project_config(workspace: str | None = None) -> dict:
     ws = workspace_root(workspace)
     config_file = ws / STATE_DIR_NAME / PROJECT_CONFIG_FILE_NAME
     return load_json_file(config_file)
+
+
+def resolve_compat_config_path(config_path: str | None, workspace: str | None = None) -> Path | None:
+    if is_missing(config_path):
+        return None
+    raw_path = Path(str(config_path)).expanduser()
+    if raw_path.is_absolute():
+        return raw_path.resolve()
+    cwd_path = raw_path.resolve()
+    if cwd_path.exists():
+        return cwd_path
+    return (workspace_root(workspace) / raw_path).resolve()
+
+
+def load_json_file_strict(path: str | Path) -> dict:
+    file_path = Path(path)
+    data = json.loads(file_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"配置文件必须是 JSON 对象: {file_path}")
+    return data
+
+
+def merge_project_config(base: dict | None, override: dict | None) -> dict:
+    merged = dict(base or {})
+    for key, value in (override or {}).items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = {**merged[key], **value}
+        else:
+            merged[key] = value
+    return merged
+
+
+def load_effective_project_config(workspace: str | None = None, config_path: str | None = None) -> tuple[dict, str | None]:
+    full_config = load_full_project_config(workspace)
+    resolved_path = resolve_compat_config_path(config_path, workspace)
+    if resolved_path is None:
+        return full_config, None
+    if not resolved_path.exists():
+        raise FileNotFoundError(f"配置文件不存在: {resolved_path}")
+
+    compat_config = load_json_file_strict(resolved_path)
+    if compat_config and "workflow" not in compat_config and LEGACY_WORKFLOW_KEYS.intersection(compat_config):
+        compat_config = {"workflow": compat_config}
+    return merge_project_config(full_config, compat_config), str(resolved_path)
 
 
 def output_json(data: dict, *, indent: int = 2) -> None:

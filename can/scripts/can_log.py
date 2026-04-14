@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from can_runtime import (
+    add_can_connection_args,
     get_can_config,
     open_can_bus,
     save_project_config,
@@ -38,6 +39,7 @@ def output_json(result):
 
 def main():
     parser = argparse.ArgumentParser(description="CAN 总线日志记录")
+    add_can_connection_args(parser)
     parser.add_argument("--output", "-o", help="输出文件路径（按扩展名选格式：.asc/.blf/.csv/.log）")
     parser.add_argument("--duration", type=float, help="记录时长（秒）")
     parser.add_argument("--max-count", type=int, help="最大记录帧数")

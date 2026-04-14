@@ -8,6 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from can_runtime import (
+    add_can_connection_args,
     get_can_config,
     open_can_bus,
     save_project_config,
@@ -38,6 +39,7 @@ def output_json(result):
 
 def main():
     parser = argparse.ArgumentParser(description="CAN 总线统计")
+    add_can_connection_args(parser)
     parser.add_argument("--duration", type=float, default=5.0, help="统计时长（秒，默认 5）")
     parser.add_argument("--top", type=int, default=20, help="显示前 N 个 ID")
     parser.add_argument("--watch", help="重点观察的 ID 列表（逗号分隔）")

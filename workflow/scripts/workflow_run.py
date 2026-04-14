@@ -16,13 +16,10 @@ if str(ROOT_DIR) not in sys.path:
 
 from workflow_runtime import (  # noqa: E402
     get_state_entry,
-    load_full_project_config,
-    load_json_file,
-    load_project_config,
+    load_effective_project_config,
     load_workspace_state,
     make_result,
     make_timing,
-    normalize_path,
     now_iso,
     output_json,
     parameter_context,
@@ -33,6 +30,13 @@ from workflow_runtime import (  # noqa: E402
 
 
 PYTHON_EXE = sys.executable
+
+
+def _with_backend(result: dict, backend: str) -> dict:
+    details = dict(result.get("details") or {})
+    details["backend"] = backend
+    result["details"] = details
+    return result
 
 
 def discover_projects(root: Path) -> dict:
@@ -104,7 +108,7 @@ def build_project(workspace: Path, full_config: dict, discovery: dict, backend: 
             cmd.extend(["--target", target])
         if uv4_exe:
             cmd.extend(["--uv4", uv4_exe])
-        return run_json(cmd, workspace)
+        return _with_backend(run_json(cmd, workspace), selected)
 
     gcc_config = full_config.get("gcc", {})
     project = gcc_config.get("project")
@@ -130,7 +134,7 @@ def build_project(workspace: Path, full_config: dict, discovery: dict, backend: 
     cmake_exe = gcc_config.get("cmake_exe")
     if cmake_exe:
         cmd.extend(["--cmake", cmake_exe])
-    return run_json(cmd, workspace)
+    return _with_backend(run_json(cmd, workspace), selected)
 
 
 def flash_project(workspace: Path, full_config: dict, state: dict, explicit: str | None) -> dict:
@@ -160,7 +164,7 @@ def flash_project(workspace: Path, full_config: dict, state: dict, explicit: str
             cmd.extend(["--interface", openocd_cfg["interface"]])
         if openocd_cfg.get("target"):
             cmd.extend(["--target", openocd_cfg["target"]])
-        return run_json(cmd, workspace)
+        return _with_backend(run_json(cmd, workspace), "openocd")
 
     jlink_cfg = full_config.get("jlink", {})
     if not jlink_cfg.get("device"):
@@ -179,7 +183,7 @@ def flash_project(workspace: Path, full_config: dict, state: dict, explicit: str
         cmd.extend(["--interface", jlink_cfg["interface"]])
     if jlink_cfg.get("speed"):
         cmd.extend(["--speed", str(jlink_cfg["speed"])])
-    return run_json(cmd, workspace)
+    return _with_backend(run_json(cmd, workspace), "jlink")
 
 
 def debug_project(workspace: Path, full_config: dict, state: dict, explicit: str | None) -> dict:
@@ -211,7 +215,7 @@ def debug_project(workspace: Path, full_config: dict, state: dict, explicit: str
             cmd.extend(["--target", openocd_cfg["target"]])
         if openocd_cfg.get("gdb_exe"):
             cmd.extend(["--gdb-exe", openocd_cfg["gdb_exe"]])
-        return run_json(cmd, workspace)
+        return _with_backend(run_json(cmd, workspace), "openocd")
 
     jlink_cfg = full_config.get("jlink", {})
     if not jlink_cfg.get("device"):
@@ -232,7 +236,7 @@ def debug_project(workspace: Path, full_config: dict, state: dict, explicit: str
         cmd.extend(["--interface", jlink_cfg["interface"]])
     if jlink_cfg.get("speed"):
         cmd.extend(["--speed", str(jlink_cfg["speed"])])
-    return run_json(cmd, workspace)
+    return _with_backend(run_json(cmd, workspace), "jlink")
 
 
 def observe_project(workspace: Path, full_config: dict, explicit: str | None) -> dict:
@@ -253,7 +257,7 @@ def observe_project(workspace: Path, full_config: dict, explicit: str | None) ->
             cmd.extend(["--interface", openocd_cfg["interface"]])
         if openocd_cfg.get("target"):
             cmd.extend(["--target", openocd_cfg["target"]])
-        return {"status": "ok", "action": "observe", "summary": "已生成 openocd semihosting 观察命令", "details": {"command": cmd}}
+        return {"status": "ok", "action": "observe", "summary": "已生成 openocd semihosting 观察命令", "details": {"command": cmd, "backend": "openocd"}}
 
     jlink_cfg = full_config.get("jlink", {})
     if not jlink_cfg.get("device"):
@@ -267,7 +271,7 @@ def observe_project(workspace: Path, full_config: dict, explicit: str | None) ->
         jlink_cfg["device"],
         "--json",
     ]
-    return {"status": "ok", "action": "observe", "summary": "已生成 jlink RTT 观察命令", "details": {"command": cmd}}
+    return {"status": "ok", "action": "observe", "summary": "已生成 jlink RTT 观察命令", "details": {"command": cmd, "backend": "jlink"}}
 
 
 def diagnose(workspace: Path, full_config: dict, discovery: dict, state: dict) -> dict:
@@ -312,9 +316,24 @@ def main() -> None:
     started_at = now_iso()
     started_ts = time.time()
     workspace = workspace_root(args.workspace)
-    # 从 .embeddedskills/config.json 读取完整配置
-    full_config = load_full_project_config(str(workspace))
-    workflow_config = load_project_config(str(workspace))
+    try:
+        full_config, config_path = load_effective_project_config(str(workspace), args.config)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        wrapped = make_result(
+            status="error",
+            action=args.action,
+            summary=str(exc),
+            context=parameter_context(provider="workflow", workspace=str(workspace)),
+            error={"code": "invalid_config", "message": str(exc)},
+            timing=make_timing(started_at, (time.time() - started_ts) * 1000),
+        )
+        if args.as_json:
+            output_json(wrapped)
+        else:
+            print(f"[workflow {args.action}] {wrapped['summary']}")
+        sys.exit(1)
+
+    workflow_config = full_config.get("workflow", {})
     state = load_workspace_state(str(workspace))
     discovery = discover_projects(workspace)
 
@@ -323,6 +342,8 @@ def main() -> None:
 
     if args.action == "plan":
         cmd = [PYTHON_EXE, str(ROOT_DIR / "workflow" / "scripts" / "workflow_plan.py"), "--workspace", str(workspace), "--json"]
+        if config_path:
+            cmd.extend(["--config", config_path])
         result = run_json(cmd, workspace)
     elif args.action == "build":
         result = build_project(workspace, full_config, discovery, args.build_backend)
@@ -388,7 +409,7 @@ def main() -> None:
         action=args.action,
         summary=result.get("summary", "workflow 执行完成"),
         details=result.get("details", {}),
-        context=parameter_context(provider="workflow", workspace=str(workspace)),
+        context=parameter_context(provider="workflow", workspace=str(workspace), config_path=config_path),
         error=result.get("error"),
         timing=make_timing(started_at, (time.time() - started_ts) * 1000),
     )

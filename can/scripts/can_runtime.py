@@ -60,6 +60,15 @@ def workspace_root(workspace: str | None = None) -> Path:
     return Path.cwd().resolve()
 
 
+def add_can_connection_args(parser, *, include_data_bitrate: bool = False) -> None:
+    """为 CLI 补充通用 CAN 连接参数。"""
+    parser.add_argument("--interface", help="CAN 后端接口名，如 pcan、vector、socketcan、slcan")
+    parser.add_argument("--channel", help="接口通道，如 PCAN_USBBUS1、0、can0")
+    parser.add_argument("--bitrate", type=int, help="CAN 仲裁域波特率，默认 500000")
+    if include_data_bitrate:
+        parser.add_argument("--data-bitrate", dest="data_bitrate", type=int, help="CAN-FD 数据域波特率，默认 2000000")
+
+
 def load_project_config(workspace: str | None = None) -> dict:
     """从 workspace/.embeddedskills/config.json 读取本 skill 的工程级配置"""
     proj_config = load_json_file(workspace_root(workspace) / STATE_DIR_NAME / PROJECT_CONFIG_FILE)

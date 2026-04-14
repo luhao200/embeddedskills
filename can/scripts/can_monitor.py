@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from can_runtime import (
+    add_can_connection_args,
     get_can_config,
     open_can_bus,
     save_project_config,
@@ -38,6 +39,7 @@ def format_data(data):
 
 def main():
     parser = argparse.ArgumentParser(description="CAN 总线实时监控")
+    add_can_connection_args(parser, include_data_bitrate=True)
     parser.add_argument("--fd", action="store_true", help="启用 CAN-FD 模式")
     parser.add_argument("--filter-id", help="只显示指定 ID（逗号分隔）")
     parser.add_argument("--exclude-id", help="排除指定 ID（逗号分隔）")

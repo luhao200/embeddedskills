@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -13,8 +14,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from workflow_runtime import (  # noqa: E402
     get_state_entry,
-    load_full_project_config,
-    load_project_config,
+    load_effective_project_config,
     load_workspace_state,
     make_result,
     make_timing,
@@ -44,9 +44,24 @@ def main() -> None:
     started_at = now_iso()
     started_ts = __import__("time").time()
     workspace = workspace_root(args.workspace)
-    # 从 .embeddedskills/config.json 读取配置
-    full_config = load_full_project_config(str(workspace))
-    workflow_config = load_project_config(str(workspace))
+    try:
+        full_config, config_path = load_effective_project_config(str(workspace), args.config)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        result = make_result(
+            status="error",
+            action="plan",
+            summary=str(exc),
+            context=parameter_context(provider="workflow", workspace=str(workspace)),
+            error={"code": "invalid_config", "message": str(exc)},
+            timing=make_timing(started_at, (__import__("time").time() - started_ts) * 1000),
+        )
+        if args.as_json:
+            output_json(result)
+        else:
+            print(f"错误: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    workflow_config = full_config.get("workflow", {})
     state = load_workspace_state(str(workspace))
     discovery = discover_projects(workspace)
 
@@ -76,7 +91,7 @@ def main() -> None:
             "observe_candidates": ["jlink:rtt", "openocd:semihosting", "jlink:swo", "openocd:itm"],
             "preferred": preferred,
         },
-        context=parameter_context(provider="workflow", workspace=str(workspace)),
+        context=parameter_context(provider="workflow", workspace=str(workspace), config_path=config_path),
         metrics={
             "keil_projects": len(discovery["keil_projects"]),
             "gcc_projects": len(discovery["gcc_projects"]),

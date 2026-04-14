@@ -61,6 +61,13 @@ def _resolve_workspace_path(workspace: Path, raw_path: str | None, default: str)
     return str(path.resolve() if path.is_absolute() else (workspace / path).resolve())
 
 
+def _resolve_project_path(workspace: Path, raw_path: str | None) -> str:
+    if is_missing(raw_path):
+        return ""
+    path = Path(str(raw_path)).expanduser()
+    return str(path.resolve() if path.is_absolute() else (workspace / path).resolve())
+
+
 def _make_relative_to_workspace(workspace: Path, path: str) -> str:
     """将绝对路径转换为相对于 workspace 的相对路径"""
     try:
@@ -359,11 +366,11 @@ def main() -> None:
         )
         # 工程级配置（优先于 state）
         if is_missing(project) and not is_missing(project_config.get("project")):
-            project = normalize_path(project_config.get("project"))
+            project = _resolve_project_path(workspace, project_config.get("project"))
             parameter_sources["project"] = "project_config:project"
         # state.json（最后 fallback）
         if is_missing(project) and not is_missing(last_build.get("project")):
-            project = normalize_path(str(last_build.get("project")))
+            project = _resolve_project_path(workspace, str(last_build.get("project")))
             parameter_sources["project"] = "state:project"
         if is_missing(project):
             raise ValueError("缺少必要参数: project")

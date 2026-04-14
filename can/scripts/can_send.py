@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from can_runtime import (
+    add_can_connection_args,
     get_can_config,
     open_can_bus,
     save_project_config,
@@ -38,6 +39,7 @@ def format_data(data):
 
 def main():
     parser = argparse.ArgumentParser(description="CAN 报文发送")
+    add_can_connection_args(parser, include_data_bitrate=True)
     parser.add_argument("id", help="CAN ID（支持 0x 前缀）")
     parser.add_argument("data", help="数据（Hex 字符串，如 'DE AD BE EF'）")
     parser.add_argument("--extended", action="store_true", help="扩展帧（29位 ID）")
