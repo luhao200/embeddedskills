@@ -4,31 +4,25 @@
 
 # embeddedskills — Embedded Development & Debugging Skills
 
-### Give AI coding assistants direct control over compilers, debuggers, and communication buses — completing the last mile of embedded development automation.
+**Give AI coding assistants direct control over compilers, debuggers, and communication buses — completing the full loop from code generation to hardware verification.**
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/status-active-success?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/zhinkgit/embeddedskills?style=flat-square)](https://github.com/zhinkgit/embeddedskills/stargazers)
-<br><br>
-<img src="https://img.shields.io/badge/Claude_Code-black?style=flat-square&logo=anthropic&logoColor=white">
-<img src="https://img.shields.io/badge/OpenAI_Codex_CLI-412991?style=flat-square&logo=openai&logoColor=white">
-<img src="https://img.shields.io/badge/Cursor-000?style=flat-square&logo=cursor&logoColor=white">
-<img src="https://img.shields.io/badge/Kiro-232F3E?style=flat-square&logo=amazon&logoColor=white">
 
-<br>
-
-**No more manual compiling, no more manual flashing, no more manual debugging.**<br>
-AI autonomously completes the entire process from writing code to verifying functionality.
-
-<br>
-
-If you find this project helpful, please give it a free ⭐
+[![Claude Code](https://img.shields.io/badge/Claude_Code-black?style=flat-square&logo=anthropic&logoColor=white)](https://claude.ai/code)
+[![OpenAI Codex CLI](https://img.shields.io/badge/OpenAI_Codex_CLI-412991?style=flat-square&logo=openai&logoColor=white)](https://github.com/openai/codex)
+[![TRAE](https://img.shields.io/badge/TRAE-0078D4?style=flat-square)](https://trae.ai)
+[![Cursor](https://img.shields.io/badge/Cursor-000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.sh)
+[![Kiro](https://img.shields.io/badge/Kiro-232F3E?style=flat-square&logo=amazon&logoColor=white)](https://kiro.ai)
 
 </div>
 
 ---
 
-## Why You Need It
+## ✨ Three Core Advantages
+
+### 🔁 Embedded AI Workflow Closed Loop
 
 Embedded development has a gap that pure software development doesn't have: writing code is just the beginning — compiling, flashing, and debugging all require human intervention at every step.
 
@@ -57,52 +51,50 @@ flowchart TD
     style G fill:#f44336,color:#fff
 ```
 
-<br>
+| Stage | Traditional AI Assistance | AI + embeddedskills |
+|------|------------|-------------------|
+| Code Writing | AI generates | AI generates |
+| Compile/Build | **Manual** | ✅ AI invokes Keil / GCC |
+| Flash/Download | **Manual** | ✅ AI invokes J-Link / OpenOCD |
+| Debug/Verify | **Manual** | ✅ AI breakpoints / registers / memory |
+| Communication Debug | **Manual** | ✅ AI serial / CAN / network |
+| Error Fixing | **Manually paste errors to AI** | ✅ AI reads and fixes autonomously |
 
-<div align="center">
+---
 
-|  | Traditional AI Assistance | AI + embeddedskills |
-|:---:|:---:|:---:|
-| Code Writing | ✅ AI | ✅ AI |
-| Compile/Build | 🙋 You | 🤖 AI invokes Keil / GCC |
-| Flash/Download | 🙋 You | 🤖 AI invokes J-Link / OpenOCD / probe-rs |
-| Debug/Verify | 🙋 You | 🤖 AI breakpoints / registers / memory |
-| Communication Debug | 🙋 You | 🤖 AI serial / CAN / network |
-| Error Fixing | 🙋 You copy errors to AI | 🤖 AI reads and fixes autonomously |
+### 🆓 Completely Free, No AI Tool Lock-in
 
-</div>
+This project is fully open source and free (MIT license). Any AI tool that supports the Skill / CLAUDE.md / Rules protocol can use it directly, including but not limited to:
+
+- **Claude Code**
+- **OpenAI Codex CLI**
+- **TRAE**
+- **Cursor, Kiro, Windsurf** and other tools supporting the Skill protocol
+
+No paid subscriptions required for any additional services. Switch AI tools freely.
+
+---
+
+### ⚡ Simple to Use, No Project Migration Required
+
+**Works directly on your existing projects — no changes to any project files.** Supports mainstream build systems and debuggers in the industry:
+
+| Dimension | Supported Range |
+|------|-------|
+| **Build Systems** | Keil MDK projects, CMake projects |
+| **Debuggers** | J-Link (SEGGER), CMSIS-DAP / DAPLink |
+| **Flash Frameworks** | OpenOCD, probe-rs compatible toolchain |
+| **Communication Buses** | Serial (UART), CAN / CAN-FD, Ethernet |
+
+One-command install, AI automatically detects project type and starts working:
+
+```bash
+npx skills add https://github.com/zhinkgit/embeddedskills -g -y
+```
 
 ---
 
 ## Skill Overview
-
-```mermaid
-flowchart TD
-    W["🎯 workflow\nAuto-detect Project · Select Toolchain · Orchestrate Full Flow"]
-
-    W --> B["🔨 Build Layer"]
-    W --> C["🔌 Communication Layer"]
-    B --> D["🔬 Debug Layer"]
-
-    B --- keil["keil"]
-    B --- gcc["gcc"]
-
-    C --- serial["serial"]
-    C --- can["can"]
-    C --- net["net"]
-
-    D --- jlink["jlink"]
-    D --- openocd["openocd"]
-    D --- probe_rs["probe-rs"]
-
-    style W fill:#4CAF50,color:#fff,rx:8
-    style B fill:#2196F3,color:#fff,rx:8
-    style C fill:#2196F3,color:#fff,rx:8
-    style D fill:#FF9800,color:#fff,rx:8
-```
-
-
-<br>
 
 | Category | Skill | What It Does | Main Subcommands |
 |:---:|:---:|---|---|
@@ -248,13 +240,15 @@ workspace/
 |---|:---:|
 | keil | ✅ Tested |
 | gcc | ✅ Tested |
+| platformio | 🔧 To be supported |
 | jlink | ✅ Tested |
 | openocd | ✅ Tested |
 | probe-rs | 🔧 Pending |
+| pyocd | 🔧 To be supported |
 | serial | ✅ Tested |
 | net | ✅ Tested |
-| workflow | ✅ Tested |
 | can | 🔧 Pending test |
+| workflow | ✅ Tested |
 
 ---
 

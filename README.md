@@ -2,33 +2,27 @@
 
 简体中文 | [English](./README.en.md)
 
-# embeddedskills — 嵌入式开发调试 Skill 集
+# embeddedskills — 嵌入式 AI 开发调试 Skill 集
 
-### 让 AI 编码助手直接操控编译器、调试器和通信总线，补上嵌入式开发自动化的最后一环。
+**让 AI 编码助手直接操控编译器、调试器和通信总线，实现从代码生成到硬件验证的完整闭环。**
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/status-active-success?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/zhinkgit/embeddedskills?style=flat-square)](https://github.com/zhinkgit/embeddedskills/stargazers)
-<br><br>
-<img src="https://img.shields.io/badge/Claude_Code-black?style=flat-square&logo=anthropic&logoColor=white">
-<img src="https://img.shields.io/badge/OpenAI_Codex_CLI-412991?style=flat-square&logo=openai&logoColor=white">
-<img src="https://img.shields.io/badge/Cursor-000?style=flat-square&logo=cursor&logoColor=white">
-<img src="https://img.shields.io/badge/Kiro-232F3E?style=flat-square&logo=amazon&logoColor=white">
 
-<br>
-
-**不再手动编译、不再手动烧录、不再手动调试。**<br>
-AI 自主完成从写代码到验证功能的全部步骤。
-
-<br>
-
-如果觉得项目对你有帮助，请点一个免费的 ⭐
+[![Claude Code](https://img.shields.io/badge/Claude_Code-black?style=flat-square&logo=anthropic&logoColor=white)](https://claude.ai/code)
+[![OpenAI Codex CLI](https://img.shields.io/badge/OpenAI_Codex_CLI-412991?style=flat-square&logo=openai&logoColor=white)](https://github.com/openai/codex)
+[![TRAE](https://img.shields.io/badge/TRAE-0078D4?style=flat-square)](https://trae.ai)
+[![Cursor](https://img.shields.io/badge/Cursor-000?style=flat-square&logo=cursor&logoColor=white)](https://cursor.sh)
+[![Kiro](https://img.shields.io/badge/Kiro-232F3E?style=flat-square&logo=amazon&logoColor=white)](https://kiro.ai)
 
 </div>
 
 ---
 
-## 为什么需要它
+## ✨ 三大核心优势
+
+### 🔁 嵌入式 AI 工作流闭环
 
 嵌入式开发有一道纯软件开发没有的鸿沟：写完代码只是开始，编译、烧录、调试每一步都需要人在中间传递信息。
 
@@ -57,52 +51,50 @@ flowchart TD
     style G fill:#f44336,color:#fff
 ```
 
-<br>
+| 环节 | 传统 AI 辅助 | AI + embeddedskills |
+|------|------------|-------------------|
+| 代码编写 | AI 生成 | AI 生成 |
+| 编译构建 | **人工操作** | ✅ AI 调用 Keil / GCC |
+| 烧录下载 | **人工操作** | ✅ AI 调用 J-Link / OpenOCD |
+| 调试验证 | **人工操作** | ✅ AI 断点 / 寄存器 / 内存 |
+| 通信调试 | **人工操作** | ✅ AI 串口 / CAN / 网络 |
+| 错误修正 | **人工转述给 AI** | ✅ AI 读取并自主修正 |
 
-<div align="center">
+---
 
-|  | 传统 AI 辅助 | AI + embeddedskills |
-|:---:|:---:|:---:|
-| 代码编写 | ✅ AI | ✅ AI |
-| 编译构建 | 🙋 你 | 🤖 AI 调用 Keil / GCC |
-| 烧录下载 | 🙋 你 | 🤖 AI 调用 J-Link / OpenOCD / probe-rs |
-| 调试验证 | 🙋 你 | 🤖 AI 断点 / 寄存器 / 内存 |
-| 通信调试 | 🙋 你 | 🤖 AI 串口 / CAN / 网络 |
-| 错误修正 | 🙋 你复制报错给 AI | 🤖 AI 自主读取并修正 |
+### 🆓 完全免费，不限 AI 工具
 
-</div>
+本项目完全开源免费（MIT 协议）。只要 AI 工具支持 Skill / CLAUDE.md / Rules 协议，均可直接使用，包括但不限于：
+
+- **Claude Code**
+- **OpenAI Codex CLI**
+- **TRAE**
+- **Cursor、Kiro、Windsurf** 等其他支持 Skill 协议的工具
+
+无需付费订阅任何附加服务，AI 工具自由切换。
+
+---
+
+### ⚡ 使用简单，无需迁移工程
+
+**直接在现有项目上使用，无需改动任何工程文件。** 支持业界主流工程体系和调试器：
+
+| 维度 | 支持范围 |
+|------|---------|
+| **构建系统** | Keil MDK 工程、CMake 工程 |
+| **调试器** | J-Link（SEGGER）、CMSIS-DAP / DAPLink |
+| **烧录框架** | OpenOCD、probe-rs 兼容工具链 |
+| **通信总线** | 串口（UART）、CAN / CAN-FD、以太网 |
+
+一条命令安装，AI 即可自动识别工程类型并开始工作：
+
+```bash
+npx skills add https://github.com/zhinkgit/embeddedskills -g -y
+```
 
 ---
 
 ## Skill 一览
-
-```mermaid
-flowchart TD
-    W["🎯 workflow\n自动识别工程 · 选择工具链 · 串联全流程"]
-
-    W --> B["🔨 构建层"]
-    W --> C["🔌 通信层"]
-    B --> D["🔬 调试层"]
-
-    B --- keil["keil"]
-    B --- gcc["gcc"]
-
-    C --- serial["serial"]
-    C --- can["can"]
-    C --- net["net"]
-
-    D --- jlink["jlink"]
-    D --- openocd["openocd"]
-    D --- probe_rs["probe-rs"]
-
-    style W fill:#4CAF50,color:#fff,rx:8
-    style B fill:#2196F3,color:#fff,rx:8
-    style C fill:#2196F3,color:#fff,rx:8
-    style D fill:#FF9800,color:#fff,rx:8
-```
-
-
-<br>
 
 | 分类 | Skill | 能做什么 | 主要子命令 |
 |:---:|:---:|---|---|
@@ -245,13 +237,15 @@ workspace/
 |---|:---:|
 | keil | ✅ 已完成测试 |
 | gcc | ✅ 已完成测试 |
+| platformio | 🔧 待支持 |
 | jlink | ✅ 已完成测试 |
 | openocd | ✅ 已完成测试 |
 | probe-rs | 🔧 待测试 |
+| pyocd | 🔧 待支持 |
 | serial | ✅ 已完成测试 |
 | net | ✅ 已完成测试 |
-| workflow | ✅ 已完成测试 |
 | can | 🔧 待测试 |
+| workflow | ✅ 已完成测试 |
 
 ---
 
