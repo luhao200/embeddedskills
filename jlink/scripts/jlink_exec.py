@@ -18,6 +18,9 @@ if str(SCRIPT_DIR) not in sys.path:
 from jlink_runtime import (
     load_local_config,
     load_project_config,
+    resolve_project_param,
+    resolve_runtime_param,
+    resolve_tool_param,
     save_project_config,
     load_workspace_state,
     get_state_entry,
@@ -350,61 +353,55 @@ def resolve_device_params(args):
     # 从 state 获取历史值
     last_flash = get_state_entry(state, "last_flash")
     last_debug = get_state_entry(state, "last_debug")
+    state_lookup = {
+        "device": last_flash.get("device") or last_debug.get("device"),
+        "interface": last_flash.get("interface") or last_debug.get("interface"),
+        "speed": last_flash.get("speed") or last_debug.get("speed"),
+        "serial_no": last_flash.get("serial_no") or last_debug.get("serial_no"),
+    }
 
-    # device: CLI > 工程配置 > state > 报错
-    device = args.device
-    device_source = "cli"
-    if is_missing(device):
-        device = project_config.get("device")
-        device_source = "project_config"
-    if is_missing(device):
-        device = last_flash.get("device") or last_debug.get("device")
-        device_source = "state"
-
-    # interface: CLI > 工程配置 > state > 默认 SWD
-    interface = args.interface
-    interface_source = "cli"
-    if is_missing(interface):
-        interface = project_config.get("interface")
-        interface_source = "project_config"
-    if is_missing(interface):
-        interface = last_flash.get("interface") or last_debug.get("interface")
-        interface_source = "state"
-    if is_missing(interface):
-        interface = "SWD"
-        interface_source = "default"
-
-    # speed: CLI > 工程配置 > state > 默认 4000
-    speed = args.speed
-    speed_source = "cli"
-    if is_missing(speed):
-        speed = project_config.get("speed")
-        speed_source = "project_config"
-    if is_missing(speed):
-        speed = last_flash.get("speed") or last_debug.get("speed")
-        speed_source = "state"
-    if is_missing(speed):
-        speed = "4000"
-        speed_source = "default"
-
-    # exe: CLI > 环境级配置
-    exe = args.exe
-    exe_source = "cli"
-    if is_missing(exe):
-        exe = local_config.get("exe", "")
-        exe_source = "config" if not is_missing(exe) else ""
-    if not is_missing(exe):
-        exe = normalize_path(str(exe))
-
-    # serial_no: CLI > 环境级配置 > state
-    serial_no = args.serial_no
-    serial_no_source = "cli"
-    if is_missing(serial_no):
-        serial_no = local_config.get("serial_no", "")
-        serial_no_source = "config" if not is_missing(serial_no) else ""
-    if is_missing(serial_no):
-        serial_no = last_flash.get("serial_no") or last_debug.get("serial_no") or ""
-        serial_no_source = "state" if not is_missing(serial_no) else ""
+    device, device_source = resolve_project_param(
+        "device",
+        args.device,
+        project_config=project_config,
+        project_keys=["device"],
+        state_record=state_lookup,
+        state_keys=["device"],
+    )
+    interface, interface_source = resolve_project_param(
+        "interface",
+        args.interface,
+        project_config=project_config,
+        project_keys=["interface"],
+        state_record=state_lookup,
+        state_keys=["interface"],
+        default="SWD",
+    )
+    speed, speed_source = resolve_project_param(
+        "speed",
+        args.speed,
+        project_config=project_config,
+        project_keys=["speed"],
+        state_record=state_lookup,
+        state_keys=["speed"],
+        default="4000",
+    )
+    exe, exe_source = resolve_tool_param(
+        "exe",
+        args.exe,
+        local_config=local_config,
+        local_keys=["exe"],
+        path_candidates=["JLink.exe"],
+        default="JLink.exe",
+    )
+    serial_no, serial_no_source = resolve_runtime_param(
+        "serial_no",
+        args.serial_no,
+        local_config=local_config,
+        local_keys=["serial_no"],
+        state_record=state_lookup,
+        state_keys=["serial_no"],
+    )
 
     return {
         "exe": exe,

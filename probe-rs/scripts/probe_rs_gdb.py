@@ -10,7 +10,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from shutil import which
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -33,6 +32,9 @@ from probe_rs_runtime import (  # noqa: E402
     now_iso,
     output_json,
     parameter_context,
+    resolve_artifact_param,
+    resolve_project_param,
+    resolve_tool_param,
     save_project_config,
     update_state_entry,
     workspace_root,
@@ -143,63 +145,56 @@ def _state_lookup(state: dict) -> dict:
 def resolve_probe_params(args, config: dict, project_config: dict, state_lookup: dict) -> tuple[dict, dict]:
     parameter_sources: dict[str, str] = {}
 
-    exe = args.exe if not is_missing(args.exe) else config.get("exe") or "probe-rs"
-    parameter_sources["exe"] = "cli" if not is_missing(args.exe) else ("config:exe" if config.get("exe") else "default")
-
-    gdb_exe = args.gdb_exe if not is_missing(args.gdb_exe) else config.get("gdb_exe")
-    gdb_source = "cli" if not is_missing(args.gdb_exe) else ("config:gdb_exe" if config.get("gdb_exe") else "")
-    if is_missing(gdb_exe):
-        discovered = which("arm-none-eabi-gdb") or which("arm-none-eabi-gdb.exe")
-        if discovered:
-            gdb_exe = discovered
-            gdb_source = "path"
-    parameter_sources["gdb_exe"] = gdb_source
-
-    chip = args.chip
-    chip_source = "cli"
-    if is_missing(chip):
-        chip = project_config.get("chip")
-        chip_source = "project_config"
-    if is_missing(chip):
-        chip = state_lookup.get("chip")
-        chip_source = "state"
-    parameter_sources["chip"] = chip_source
-
-    protocol = args.protocol
-    protocol_source = "cli"
-    if is_missing(protocol):
-        protocol = project_config.get("protocol")
-        protocol_source = "project_config"
-    if is_missing(protocol):
-        protocol = state_lookup.get("protocol")
-        protocol_source = "state"
-    if is_missing(protocol):
-        protocol = "swd"
-        protocol_source = "default"
-    parameter_sources["protocol"] = protocol_source
-
-    probe = args.probe
-    probe_source = "cli"
-    if is_missing(probe):
-        probe = project_config.get("probe")
-        probe_source = "project_config"
-    if is_missing(probe):
-        probe = state_lookup.get("probe")
-        probe_source = "state"
-    parameter_sources["probe"] = probe_source
-
-    speed = args.speed
-    speed_source = "cli"
-    if is_missing(speed):
-        speed = project_config.get("speed")
-        speed_source = "project_config"
-    if is_missing(speed):
-        speed = state_lookup.get("speed")
-        speed_source = "state"
-    if is_missing(speed):
-        speed = "4000"
-        speed_source = "default"
-    parameter_sources["speed"] = speed_source
+    exe, parameter_sources["exe"] = resolve_tool_param(
+        "exe",
+        args.exe,
+        local_config=config,
+        local_keys=["exe"],
+        path_candidates=["probe-rs.exe", "probe-rs"],
+        default="probe-rs",
+    )
+    gdb_exe, parameter_sources["gdb_exe"] = resolve_tool_param(
+        "gdb_exe",
+        args.gdb_exe,
+        local_config=config,
+        local_keys=["gdb_exe"],
+        path_candidates=["arm-none-eabi-gdb.exe", "arm-none-eabi-gdb"],
+        default="arm-none-eabi-gdb",
+    )
+    chip, parameter_sources["chip"] = resolve_project_param(
+        "chip",
+        args.chip,
+        project_config=project_config,
+        project_keys=["chip"],
+        state_record=state_lookup,
+        state_keys=["chip"],
+    )
+    protocol, parameter_sources["protocol"] = resolve_project_param(
+        "protocol",
+        args.protocol,
+        project_config=project_config,
+        project_keys=["protocol"],
+        state_record=state_lookup,
+        state_keys=["protocol"],
+        default="swd",
+    )
+    probe, parameter_sources["probe"] = resolve_project_param(
+        "probe",
+        args.probe,
+        project_config=project_config,
+        project_keys=["probe"],
+        state_record=state_lookup,
+        state_keys=["probe"],
+    )
+    speed, parameter_sources["speed"] = resolve_project_param(
+        "speed",
+        args.speed,
+        project_config=project_config,
+        project_keys=["speed"],
+        state_record=state_lookup,
+        state_keys=["speed"],
+        default="4000",
+    )
 
     connect_under_reset = args.connect_under_reset
     connect_source = "cli" if args.connect_under_reset else ""
@@ -217,14 +212,15 @@ def resolve_probe_params(args, config: dict, project_config: dict, state_lookup:
         connect_source = "default"
     parameter_sources["connect_under_reset"] = connect_source
 
-    elf_file = args.elf
-    elf_source = "cli"
-    if is_missing(elf_file):
-        elf_file = state_lookup.get("elf_file")
-        elf_source = "state"
-    if not is_missing(elf_file):
-        elf_file = normalize_path(str(elf_file))
-    parameter_sources["elf"] = elf_source
+    elf_file, parameter_sources["elf"] = resolve_artifact_param(
+        "elf",
+        args.elf,
+        project_config=project_config,
+        project_keys=["elf", "default_elf"],
+        state_record=state_lookup,
+        state_keys=["elf_file"],
+        normalize_as_path=True,
+    )
 
     gdb_port = args.gdb_port if args.gdb_port else config.get("gdb_port", 3333)
     parameter_sources["gdb_port"] = "cli" if args.gdb_port else ("config:gdb_port" if config.get("gdb_port") else "default")

@@ -139,19 +139,19 @@ def resolve_param(
     state_keys: list[str] | None = None,
     default: Any = None,
 ) -> tuple[Any, str]:
-    """统一参数解析，优先级: CLI > 环境级 > 工程级 > state > default"""
+    """统一参数解析，优先级: CLI > 工程级 > 环境级 > state > default"""
     if not is_missing(cli_value):
         return cli_value, "cli"
-
-    if local_config and local_keys:
-        value, key = _first_resolved(local_config, local_keys)
-        if not is_missing(value):
-            return value, f"local:{key}"
 
     if project_config and project_keys:
         value, key = _first_resolved(project_config, project_keys)
         if not is_missing(value):
             return value, f"project:{key}"
+
+    if local_config and local_keys:
+        value, key = _first_resolved(local_config, local_keys)
+        if not is_missing(value):
+            return value, f"local:{key}"
 
     if state and state_keys:
         value, key = _first_resolved(state, state_keys)

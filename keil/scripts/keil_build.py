@@ -32,7 +32,9 @@ from keil_runtime import (  # noqa: E402
     now_iso,
     output_json,
     parameter_context,
-    resolve_param,
+    resolve_project_param,
+    resolve_runtime_param,
+    resolve_tool_param,
     save_project_config,
     update_state_entry,
     workspace_root,
@@ -439,64 +441,56 @@ def main() -> None:
 
     parameter_sources: dict[str, str] = {}
     try:
-        # uv4_exe: CLI > 环境级配置 > 必需
-        uv4_exe, parameter_sources["uv4"] = resolve_param(
+        # uv4_exe: CLI > 环境级配置 > PATH > 默认命令名
+        uv4_exe, parameter_sources["uv4"] = resolve_tool_param(
             "uv4",
             args.uv4,
-            config=local_config,
-            config_keys=["uv4_exe"],
+            local_config=local_config,
+            local_keys=["uv4_exe"],
+            path_candidates=["UV4.exe"],
+            default="UV4.exe",
+            required=True,
+        )
+
+        # project: CLI > 工程级配置 > state.json > 必需
+        project, parameter_sources["project"] = resolve_project_param(
+            "project",
+            args.project,
+            project_config=project_config,
+            project_keys=["project"],
+            state_record=last_build,
+            state_keys=["project"],
             required=True,
             normalize_as_path=True,
             workspace=str(workspace),
         )
-        
-        # project: CLI > 环境级配置 > 工程级配置 > state.json > 必需
-        project, parameter_sources["project"] = resolve_param(
-            "project",
-            args.project,
-            config=local_config,
-            config_keys=["default_project"],
-            normalize_as_path=True,
-            workspace=str(workspace),
-        )
-        # 工程级配置（优先于 state）
-        if is_missing(project) and not is_missing(project_config.get("project")):
-            project = _resolve_project_path(workspace, project_config.get("project"))
-            parameter_sources["project"] = "project_config:project"
-        # state.json（最后 fallback）
-        if is_missing(project) and not is_missing(last_build.get("project")):
-            project = _resolve_project_path(workspace, str(last_build.get("project")))
-            parameter_sources["project"] = "state:project"
         if is_missing(project):
             raise ValueError("缺少必要参数: project")
-        
-        # target: CLI > 环境级配置 > 工程级配置 > state.json
-        target, parameter_sources["target"] = resolve_param(
+
+        # target: CLI > 工程级配置 > state.json
+        target, parameter_sources["target"] = resolve_project_param(
             "target",
             args.target,
-            config=local_config,
-            config_keys=["default_target"],
+            project_config=project_config,
+            project_keys=["target"],
+            state_record=last_build,
+            state_keys=["target"],
         )
-        # 工程级配置（优先于 state）
-        if is_missing(target) and not is_missing(project_config.get("target")):
-            target = project_config.get("target")
-            parameter_sources["target"] = "project_config:target"
-        # state.json（最后 fallback）
-        if is_missing(target) and not is_missing(last_build.get("target")):
-            target = last_build.get("target")
-            parameter_sources["target"] = "state:target"
-        
-        # log_dir: CLI > 工程级配置 > 环境级配置 > 默认值(.embeddedskills/build)
-        log_dir_raw = args.log_dir or project_config.get("log_dir") or local_config.get("log_dir")
+
+        # log_dir: CLI > 工程级配置 > 环境级配置 > state.json > 默认值
+        log_dir_raw, parameter_sources["log_dir"] = resolve_runtime_param(
+            "log_dir",
+            args.log_dir,
+            project_config=project_config,
+            project_keys=["log_dir"],
+            local_config=local_config,
+            local_keys=["log_dir"],
+            state_record=last_build,
+            state_keys=["log_dir"],
+            default=".embeddedskills/build",
+            workspace=str(workspace),
+        )
         log_dir = _resolve_workspace_path(workspace, log_dir_raw, ".embeddedskills/build")
-        if args.log_dir:
-            parameter_sources["log_dir"] = "cli"
-        elif project_config.get("log_dir"):
-            parameter_sources["log_dir"] = "project_config:log_dir"
-        elif local_config.get("log_dir"):
-            parameter_sources["log_dir"] = "config:log_dir"
-        else:
-            parameter_sources["log_dir"] = "default"
     except ValueError as exc:
         result = make_result(
             status="error",

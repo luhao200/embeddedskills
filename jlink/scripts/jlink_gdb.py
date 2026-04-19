@@ -18,13 +18,16 @@ if str(ROOT_DIR) not in sys.path:
 
 from jlink_gdb_common import build_gdb_commands, parse_gdb_output, run_gdb_commands  # noqa: E402
 from jlink_runtime import (  # noqa: E402
+    resolve_artifact_param,
+    resolve_project_param,
+    resolve_runtime_param,
+    resolve_tool_param,
     build_artifacts,
     default_config_path,
     get_state_entry,
     hidden_subprocess_kwargs,
     is_missing,
     load_json_file,
-    load_local_config,
     load_project_config,
     load_workspace_state,
     make_result,
@@ -33,7 +36,6 @@ from jlink_runtime import (  # noqa: E402
     now_iso,
     output_json,
     parameter_context,
-    resolve_param,
     save_project_config,
     update_state_entry,
     workspace_root,
@@ -184,41 +186,32 @@ def _state_lookup(state: dict) -> dict:
 
 def resolve_device_params(args, project_config: dict, state_lookup: dict) -> dict:
     """解析 device/interface/speed 参数，优先级: CLI > 工程配置 > state.json > default"""
-    # device: CLI > 工程配置 > state > 报错
-    device = args.device
-    device_source = "cli"
-    if is_missing(device):
-        device = project_config.get("device")
-        device_source = "project_config"
-    if is_missing(device):
-        device = state_lookup.get("device")
-        device_source = "state"
-
-    # interface: CLI > 工程配置 > state > 默认 SWD
-    interface = args.interface
-    interface_source = "cli"
-    if is_missing(interface):
-        interface = project_config.get("interface")
-        interface_source = "project_config"
-    if is_missing(interface):
-        interface = state_lookup.get("interface")
-        interface_source = "state"
-    if is_missing(interface):
-        interface = "SWD"
-        interface_source = "default"
-
-    # speed: CLI > 工程配置 > state > 默认 4000
-    speed = args.speed
-    speed_source = "cli"
-    if is_missing(speed):
-        speed = project_config.get("speed")
-        speed_source = "project_config"
-    if is_missing(speed):
-        speed = state_lookup.get("speed")
-        speed_source = "state"
-    if is_missing(speed):
-        speed = "4000"
-        speed_source = "default"
+    device, device_source = resolve_project_param(
+        "device",
+        args.device,
+        project_config=project_config,
+        project_keys=["device"],
+        state_record=state_lookup,
+        state_keys=["device"],
+    )
+    interface, interface_source = resolve_project_param(
+        "interface",
+        args.interface,
+        project_config=project_config,
+        project_keys=["interface"],
+        state_record=state_lookup,
+        state_keys=["interface"],
+        default="SWD",
+    )
+    speed, speed_source = resolve_project_param(
+        "speed",
+        args.speed,
+        project_config=project_config,
+        project_keys=["speed"],
+        state_record=state_lookup,
+        state_keys=["speed"],
+        default="4000",
+    )
 
     return {
         "device": device,
@@ -280,23 +273,23 @@ def main() -> None:
 
     parameter_sources: dict[str, str] = {}
     try:
-        gdbserver_exe, parameter_sources["gdbserver_exe"] = resolve_param(
+        gdbserver_exe, parameter_sources["gdbserver_exe"] = resolve_tool_param(
             "gdbserver_exe",
             args.gdbserver_exe,
-            config=config,
-            config_keys=["gdbserver_exe"],
+            local_config=config,
+            local_keys=["gdbserver_exe"],
+            path_candidates=["JLinkGDBServerCL.exe"],
+            default="JLinkGDBServerCL.exe",
             required=True,
-            normalize_as_path=True,
-            workspace=str(workspace),
         )
-        gdb_exe, parameter_sources["gdb_exe"] = resolve_param(
+        gdb_exe, parameter_sources["gdb_exe"] = resolve_tool_param(
             "gdb_exe",
             args.gdb_exe,
-            config=config,
-            config_keys=["gdb_exe"],
+            local_config=config,
+            local_keys=["gdb_exe"],
+            path_candidates=["arm-none-eabi-gdb.exe", "arm-none-eabi-gdb"],
+            default="arm-none-eabi-gdb",
             required=True,
-            normalize_as_path=True,
-            workspace=str(workspace),
         )
         # device 从工程配置或 state 解析
         device = dev_params["device"]
@@ -304,11 +297,11 @@ def main() -> None:
         if is_missing(device):
             raise ValueError("缺少必要参数: device")
 
-        elf_file, parameter_sources["elf"] = resolve_param(
+        elf_file, parameter_sources["elf"] = resolve_artifact_param(
             "elf",
             args.elf,
-            config=config,
-            config_keys=["default_elf"],
+            project_config=project_config,
+            project_keys=["elf", "default_elf"],
             state_record=state_lookup,
             state_keys=["elf_file", "debug_file"],
             normalize_as_path=True,
@@ -318,11 +311,11 @@ def main() -> None:
         parameter_sources["interface"] = dev_params["interface_source"]
         speed = dev_params["speed"]
         parameter_sources["speed"] = dev_params["speed_source"]
-        serial_no, parameter_sources["serial_no"] = resolve_param(
+        serial_no, parameter_sources["serial_no"] = resolve_runtime_param(
             "serial_no",
             args.serial_no,
-            config=config,
-            config_keys=["serial_no"],
+            local_config=config,
+            local_keys=["serial_no"],
             state_record=state_lookup,
             state_keys=["serial_no"],
         )

@@ -32,7 +32,10 @@ from openocd_runtime import (  # noqa: E402
     now_iso,
     output_json,
     parameter_context,
-    resolve_param,
+    resolve_artifact_param,
+    resolve_project_param,
+    resolve_runtime_param,
+    resolve_tool_param,
     save_project_config,
     update_state_entry,
     workspace_root,
@@ -225,55 +228,46 @@ def _state_lookup(state: dict) -> dict:
 
 def resolve_openocd_params(args, project_config: dict, state_lookup: dict) -> dict:
     """解析 OpenOCD 工程级参数，优先级: CLI > 工程配置 > state.json"""
-    # board: CLI > 工程配置 > state
-    board = args.board
-    board_source = "cli"
-    if is_missing(board):
-        board = project_config.get("board")
-        board_source = "project_config"
-    if is_missing(board):
-        board = state_lookup.get("board")
-        board_source = "state"
-
-    # interface: CLI > 工程配置 > state
-    interface = args.interface
-    interface_source = "cli"
-    if is_missing(interface):
-        interface = project_config.get("interface")
-        interface_source = "project_config"
-    if is_missing(interface):
-        interface = state_lookup.get("interface")
-        interface_source = "state"
-
-    # target: CLI > 工程配置 > state
-    target = args.target
-    target_source = "cli"
-    if is_missing(target):
-        target = project_config.get("target")
-        target_source = "project_config"
-    if is_missing(target):
-        target = state_lookup.get("target")
-        target_source = "state"
-
-    # adapter_speed: CLI > 工程配置 > state
-    adapter_speed = args.adapter_speed
-    adapter_speed_source = "cli"
-    if is_missing(adapter_speed):
-        adapter_speed = project_config.get("adapter_speed")
-        adapter_speed_source = "project_config"
-    if is_missing(adapter_speed):
-        adapter_speed = state_lookup.get("adapter_speed")
-        adapter_speed_source = "state"
-
-    # transport: CLI > 工程配置 > state
-    transport = args.transport
-    transport_source = "cli"
-    if is_missing(transport):
-        transport = project_config.get("transport")
-        transport_source = "project_config"
-    if is_missing(transport):
-        transport = state_lookup.get("transport")
-        transport_source = "state"
+    board, board_source = resolve_project_param(
+        "board",
+        args.board,
+        project_config=project_config,
+        project_keys=["board"],
+        state_record=state_lookup,
+        state_keys=["board"],
+    )
+    interface, interface_source = resolve_project_param(
+        "interface",
+        args.interface,
+        project_config=project_config,
+        project_keys=["interface"],
+        state_record=state_lookup,
+        state_keys=["interface"],
+    )
+    target, target_source = resolve_project_param(
+        "target",
+        args.target,
+        project_config=project_config,
+        project_keys=["target"],
+        state_record=state_lookup,
+        state_keys=["target"],
+    )
+    adapter_speed, adapter_speed_source = resolve_project_param(
+        "adapter_speed",
+        args.adapter_speed,
+        project_config=project_config,
+        project_keys=["adapter_speed"],
+        state_record=state_lookup,
+        state_keys=["adapter_speed"],
+    )
+    transport, transport_source = resolve_project_param(
+        "transport",
+        args.transport,
+        project_config=project_config,
+        project_keys=["transport"],
+        state_record=state_lookup,
+        state_keys=["transport"],
+    )
 
     return {
         "board": board,
@@ -339,11 +333,13 @@ def main() -> None:
 
     parameter_sources: dict[str, str] = {}
     try:
-        exe, parameter_sources["exe"] = resolve_param(
+        exe, parameter_sources["exe"] = resolve_tool_param(
             "exe",
             args.exe,
-            config=config,
-            config_keys=["exe"],
+            local_config=config,
+            local_keys=["exe"],
+            path_candidates=["openocd.exe", "openocd"],
+            default="openocd",
             required=True,
         )
 
@@ -359,27 +355,27 @@ def main() -> None:
         transport = oc_params["transport"]
         parameter_sources["transport"] = oc_params["transport_source"]
 
-        search, parameter_sources["search"] = resolve_param(
+        search, parameter_sources["search"] = resolve_runtime_param(
             "search",
             args.search,
-            config=config,
-            config_keys=["scripts_dir"],
+            local_config=config,
+            local_keys=["scripts_dir"],
             state_record=state_lookup,
             state_keys=["search"],
         )
-        gdb_port, parameter_sources["gdb_port"] = resolve_param(
+        gdb_port, parameter_sources["gdb_port"] = resolve_runtime_param(
             "gdb_port",
             args.gdb_port,
-            config=config,
-            config_keys=["gdb_port"],
+            local_config=config,
+            local_keys=["gdb_port"],
             state_record=state_lookup,
             state_keys=["gdb_port"],
         )
-        telnet_port, parameter_sources["telnet_port"] = resolve_param(
+        telnet_port, parameter_sources["telnet_port"] = resolve_runtime_param(
             "telnet_port",
             args.telnet_port,
-            config=config,
-            config_keys=["telnet_port"],
+            local_config=config,
+            local_keys=["telnet_port"],
             state_record=state_lookup,
             state_keys=["telnet_port"],
         )
@@ -420,23 +416,19 @@ def main() -> None:
     elf_file = None
     if args.command != "server":
         try:
-            gdb_exe, parameter_sources["gdb_exe"] = resolve_param(
+            gdb_exe, parameter_sources["gdb_exe"] = resolve_tool_param(
                 "gdb_exe",
                 args.gdb_exe,
-                config=config,
-                config_keys=["gdb_exe"],
-                normalize_as_path=True,
+                local_config=config,
+                local_keys=["gdb_exe"],
+                path_candidates=["arm-none-eabi-gdb.exe", "arm-none-eabi-gdb"],
+                default="arm-none-eabi-gdb",
             )
-            if is_missing(gdb_exe) and not is_missing(project_config.get("gdb_exe")):
-                gdb_exe = normalize_path(project_config.get("gdb_exe"))
-                parameter_sources["gdb_exe"] = "project_config:gdb_exe"
-            if is_missing(gdb_exe):
-                raise ValueError("缺少必要参数: gdb_exe")
-            elf_file, parameter_sources["elf"] = resolve_param(
+            elf_file, parameter_sources["elf"] = resolve_artifact_param(
                 "elf",
                 args.elf,
-                config=config,
-                config_keys=["default_elf"],
+                project_config=project_config,
+                project_keys=["elf", "default_elf"],
                 state_record=state_lookup,
                 state_keys=["elf_file", "debug_file"],
                 normalize_as_path=True,

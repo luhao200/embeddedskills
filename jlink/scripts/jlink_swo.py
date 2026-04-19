@@ -35,6 +35,7 @@ from jlink_runtime import (  # noqa: E402
     now_iso,
     output_json,
     parameter_context,
+    resolve_tool_param,
     update_state_entry,
     workspace_root,
 )
@@ -55,7 +56,14 @@ def start_stream_reader(stream) -> queue.Queue:
 
 
 def _auto_viewer_cmd(config: dict, project_config: dict, state: dict) -> list[str]:
-    jlink_exe = config.get("exe", "")
+    jlink_exe, _ = resolve_tool_param(
+        "exe",
+        None,
+        local_config=config,
+        local_keys=["exe"],
+        path_candidates=["JLink.exe"],
+        default="JLink.exe",
+    )
     if not jlink_exe:
         return []
 

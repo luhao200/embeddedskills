@@ -18,13 +18,15 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from jlink_runtime import (  # noqa: E402
+    resolve_project_param,
+    resolve_runtime_param,
+    resolve_tool_param,
     default_config_path,
     emit_stream_record,
     get_state_entry,
     hidden_subprocess_kwargs,
     is_missing,
     load_json_file,
-    load_local_config,
     load_project_config,
     load_workspace_state,
     make_result,
@@ -33,7 +35,6 @@ from jlink_runtime import (  # noqa: E402
     now_iso,
     output_json,
     parameter_context,
-    resolve_param,
     save_project_config,
     update_state_entry,
     workspace_root,
@@ -165,41 +166,32 @@ def _state_lookup(state: dict) -> dict:
 
 def resolve_device_params(args, project_config: dict, state_lookup: dict) -> dict:
     """解析 device/interface/speed 参数，优先级: CLI > 工程配置 > state.json > default"""
-    # device: CLI > 工程配置 > state > 报错
-    device = args.device
-    device_source = "cli"
-    if is_missing(device):
-        device = project_config.get("device")
-        device_source = "project_config"
-    if is_missing(device):
-        device = state_lookup.get("device")
-        device_source = "state"
-
-    # interface: CLI > 工程配置 > state > 默认 SWD
-    interface = args.interface
-    interface_source = "cli"
-    if is_missing(interface):
-        interface = project_config.get("interface")
-        interface_source = "project_config"
-    if is_missing(interface):
-        interface = state_lookup.get("interface")
-        interface_source = "state"
-    if is_missing(interface):
-        interface = "SWD"
-        interface_source = "default"
-
-    # speed: CLI > 工程配置 > state > 默认 4000
-    speed = args.speed
-    speed_source = "cli"
-    if is_missing(speed):
-        speed = project_config.get("speed")
-        speed_source = "project_config"
-    if is_missing(speed):
-        speed = state_lookup.get("speed")
-        speed_source = "state"
-    if is_missing(speed):
-        speed = "4000"
-        speed_source = "default"
+    device, device_source = resolve_project_param(
+        "device",
+        args.device,
+        project_config=project_config,
+        project_keys=["device"],
+        state_record=state_lookup,
+        state_keys=["device"],
+    )
+    interface, interface_source = resolve_project_param(
+        "interface",
+        args.interface,
+        project_config=project_config,
+        project_keys=["interface"],
+        state_record=state_lookup,
+        state_keys=["interface"],
+        default="SWD",
+    )
+    speed, speed_source = resolve_project_param(
+        "speed",
+        args.speed,
+        project_config=project_config,
+        project_keys=["speed"],
+        state_record=state_lookup,
+        state_keys=["speed"],
+        default="4000",
+    )
 
     return {
         "device": device,
@@ -247,41 +239,41 @@ def main() -> None:
         if is_missing(device):
             raise ValueError("缺少必要参数: device")
 
-        gdbserver_exe, parameter_sources["gdbserver_exe"] = resolve_param(
+        gdbserver_exe, parameter_sources["gdbserver_exe"] = resolve_tool_param(
             "gdbserver_exe",
             args.gdbserver_exe,
-            config=config,
-            config_keys=["gdbserver_exe"],
+            local_config=config,
+            local_keys=["gdbserver_exe"],
+            path_candidates=["JLinkGDBServerCL.exe"],
+            default="JLinkGDBServerCL.exe",
             required=True,
-            normalize_as_path=True,
-            workspace=str(workspace),
         )
-        rtt_exe, parameter_sources["rtt_exe"] = resolve_param(
+        rtt_exe, parameter_sources["rtt_exe"] = resolve_tool_param(
             "rtt_exe",
             args.rtt_exe,
-            config=config,
-            config_keys=["rtt_exe"],
+            local_config=config,
+            local_keys=["rtt_exe"],
+            path_candidates=["JLinkRTTClient.exe"],
+            default="JLinkRTTClient.exe",
             required=True,
-            normalize_as_path=True,
-            workspace=str(workspace),
         )
         interface = dev_params["interface"]
         parameter_sources["interface"] = dev_params["interface_source"]
         speed = dev_params["speed"]
         parameter_sources["speed"] = dev_params["speed_source"]
-        serial_no, parameter_sources["serial_no"] = resolve_param(
+        serial_no, parameter_sources["serial_no"] = resolve_runtime_param(
             "serial_no",
             args.serial_no,
-            config=config,
-            config_keys=["serial_no"],
+            local_config=config,
+            local_keys=["serial_no"],
             state_record=state_lookup,
             state_keys=["serial_no"],
         )
-        rtt_port, parameter_sources["rtt_port"] = resolve_param(
+        rtt_port, parameter_sources["rtt_port"] = resolve_runtime_param(
             "rtt_port",
             args.rtt_port,
-            config=config,
-            config_keys=["rtt_telnet_port"],
+            local_config=config,
+            local_keys=["rtt_telnet_port"],
         )
     except ValueError as exc:
         result = make_result(

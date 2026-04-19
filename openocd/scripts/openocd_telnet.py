@@ -22,7 +22,11 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from openocd_runtime import (
     hidden_subprocess_kwargs,
+    load_local_config,
     load_project_config,
+    resolve_project_param,
+    resolve_runtime_param,
+    resolve_tool_param,
     save_project_config,
     load_workspace_state,
     get_state_entry,
@@ -293,55 +297,46 @@ ALL_ACTIONS = ["halt", "resume", "step", "reg", "read-mem", "write-mem", "bp", "
 
 def resolve_openocd_params(args, project_config: dict, state_lookup: dict) -> dict:
     """解析 OpenOCD 工程级参数，优先级: CLI > 工程配置 > state.json"""
-    # board: CLI > 工程配置 > state
-    board = args.board
-    board_source = "cli"
-    if is_missing(board):
-        board = project_config.get("board")
-        board_source = "project_config"
-    if is_missing(board):
-        board = state_lookup.get("board")
-        board_source = "state"
-
-    # interface: CLI > 工程配置 > state
-    interface = args.interface
-    interface_source = "cli"
-    if is_missing(interface):
-        interface = project_config.get("interface")
-        interface_source = "project_config"
-    if is_missing(interface):
-        interface = state_lookup.get("interface")
-        interface_source = "state"
-
-    # target: CLI > 工程配置 > state
-    target = args.target
-    target_source = "cli"
-    if is_missing(target):
-        target = project_config.get("target")
-        target_source = "project_config"
-    if is_missing(target):
-        target = state_lookup.get("target")
-        target_source = "state"
-
-    # adapter_speed: CLI > 工程配置 > state
-    adapter_speed = args.adapter_speed
-    adapter_speed_source = "cli"
-    if is_missing(adapter_speed):
-        adapter_speed = project_config.get("adapter_speed")
-        adapter_speed_source = "project_config"
-    if is_missing(adapter_speed):
-        adapter_speed = state_lookup.get("adapter_speed")
-        adapter_speed_source = "state"
-
-    # transport: CLI > 工程配置 > state
-    transport = args.transport
-    transport_source = "cli"
-    if is_missing(transport):
-        transport = project_config.get("transport")
-        transport_source = "project_config"
-    if is_missing(transport):
-        transport = state_lookup.get("transport")
-        transport_source = "state"
+    board, board_source = resolve_project_param(
+        "board",
+        args.board,
+        project_config=project_config,
+        project_keys=["board"],
+        state_record=state_lookup,
+        state_keys=["board"],
+    )
+    interface, interface_source = resolve_project_param(
+        "interface",
+        args.interface,
+        project_config=project_config,
+        project_keys=["interface"],
+        state_record=state_lookup,
+        state_keys=["interface"],
+    )
+    target, target_source = resolve_project_param(
+        "target",
+        args.target,
+        project_config=project_config,
+        project_keys=["target"],
+        state_record=state_lookup,
+        state_keys=["target"],
+    )
+    adapter_speed, adapter_speed_source = resolve_project_param(
+        "adapter_speed",
+        args.adapter_speed,
+        project_config=project_config,
+        project_keys=["adapter_speed"],
+        state_record=state_lookup,
+        state_keys=["adapter_speed"],
+    )
+    transport, transport_source = resolve_project_param(
+        "transport",
+        args.transport,
+        project_config=project_config,
+        project_keys=["transport"],
+        state_record=state_lookup,
+        state_keys=["transport"],
+    )
 
     return {
         "board": board,
@@ -360,15 +355,15 @@ def resolve_openocd_params(args, project_config: dict, state_lookup: dict) -> di
 def main():
     parser = argparse.ArgumentParser(description="OpenOCD Telnet 调试命令")
     parser.add_argument("action", choices=ALL_ACTIONS)
-    parser.add_argument("--exe", default="openocd", help="openocd 路径")
+    parser.add_argument("--exe", default=None, help="openocd 路径")
     parser.add_argument("--board", default=None, help="board 配置文件")
     parser.add_argument("--interface", default=None, help="interface 配置文件")
     parser.add_argument("--target", default=None, help="target 配置文件")
     parser.add_argument("--search", default="", help="额外配置脚本搜索目录")
     parser.add_argument("--adapter-speed", default=None, help="调试速率 kHz")
     parser.add_argument("--transport", default=None, choices=["", "swd", "jtag"], help="传输协议")
-    parser.add_argument("--gdb-port", type=int, default=3333, help="GDB 端口")
-    parser.add_argument("--telnet-port", type=int, default=4444, help="Telnet 端口")
+    parser.add_argument("--gdb-port", type=int, default=None, help="GDB 端口")
+    parser.add_argument("--telnet-port", type=int, default=None, help="Telnet 端口")
     parser.add_argument("--address", default="", help="地址（read-mem/write-mem/bp/rbp/run-to 用）")
     parser.add_argument("--length", type=int, default=16, help="读取长度（read-mem 用，单位为 width 数量）")
     parser.add_argument("--value", default="", help="写入值（write-mem 用）")
@@ -383,6 +378,7 @@ def main():
 
     # 解析工程级参数
     workspace = workspace_root(args.workspace)
+    config = load_local_config(__file__)
     project_config = load_project_config(str(workspace))
     state = load_workspace_state(str(workspace))
     state_lookup = {
@@ -400,6 +396,34 @@ def main():
     target = oc_params["target"]
     adapter_speed = oc_params["adapter_speed"]
     transport = oc_params["transport"]
+    exe, _ = resolve_tool_param(
+        "exe",
+        args.exe,
+        local_config=config,
+        local_keys=["exe"],
+        path_candidates=["openocd.exe", "openocd"],
+        default="openocd",
+    )
+    search, _ = resolve_runtime_param(
+        "search",
+        args.search,
+        local_config=config,
+        local_keys=["scripts_dir"],
+    )
+    gdb_port, _ = resolve_runtime_param(
+        "gdb_port",
+        args.gdb_port,
+        local_config=config,
+        local_keys=["gdb_port"],
+        default=3333,
+    )
+    telnet_port, _ = resolve_runtime_param(
+        "telnet_port",
+        args.telnet_port,
+        local_config=config,
+        local_keys=["telnet_port"],
+        default=4444,
+    )
 
     # 参数校验
     if not board and not interface and not target:
@@ -437,16 +461,16 @@ def main():
 
     # 构建 OpenOCD 命令并启动
     cmd = build_openocd_cmd(
-        exe=args.exe, board=board or "", interface=interface or "", target=target or "",
-        search=args.search, adapter_speed=adapter_speed or "", transport=transport or "",
-        gdb_port=args.gdb_port, telnet_port=args.telnet_port,
+        exe=exe, board=board or "", interface=interface or "", target=target or "",
+        search=search or "", adapter_speed=adapter_speed or "", transport=transport or "",
+        gdb_port=int(gdb_port), telnet_port=int(telnet_port),
     )
 
     proc = None
     telnet = None
     try:
         proc = start_openocd_server(cmd)
-        ready, errors = wait_server_ready(proc, args.telnet_port)
+        ready, errors = wait_server_ready(proc, int(telnet_port))
 
         if not ready:
             error_msg = "; ".join(errors) if errors else "OpenOCD 启动失败或超时"
@@ -461,7 +485,7 @@ def main():
             sys.exit(1)
 
         # 连接 Telnet
-        telnet = TelnetConnection(port=args.telnet_port)
+        telnet = TelnetConnection(port=int(telnet_port))
         telnet.connect()
 
         # 执行调试命令
