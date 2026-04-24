@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -363,9 +364,48 @@ def get_serial_config(
     return config, sources
 
 
-def open_serial_port(config: dict):
-    """根据配置打开串口"""
+def is_mux_alive(mux_info: dict) -> bool:
+    """检查 mux 进程是否存活"""
+    for pid_key in ("tcp_pid", "pty_pid"):
+        pid = mux_info.get(pid_key, 0)
+        if not pid:
+            return False
+        try:
+            os.kill(pid, 0)
+        except (ProcessLookupError, PermissionError):
+            return False
+    return True
+
+
+def get_mux_info(workspace: str | None = None) -> dict | None:
+    """获取运行中的 mux 连接信息，未运行返回 None"""
+    state = load_workspace_state(workspace)
+    mux_info = state.get("serial_mux")
+    if not mux_info:
+        return None
+    if not is_mux_alive(mux_info):
+        state.pop("serial_mux", None)
+        save_workspace_state(state, workspace)
+        return None
+    return mux_info
+
+
+def open_serial_port(config: dict, use_mux: bool = True):
+    """根据配置打开串口连接。
+
+    当 mux 运行时自动通过 socket:// 连接 TCP 端口，
+    从而实现与 minicom 同时访问串口。
+    use_mux=False 时跳过 mux 检测，直接打开真实串口。
+    """
     import serial
+
+    if use_mux:
+        mux = get_mux_info()
+        if mux:
+            url = f"socket://127.0.0.1:{mux['tcp_port']}"
+            ser = serial.serial_for_url(url)
+            ser.timeout = config.get("timeout_sec", 1.0)
+            return ser
 
     PARITY_MAP = {"none": "N", "even": "E", "odd": "O", "mark": "M", "space": "S"}
     parity = PARITY_MAP.get(config.get("parity", "none"), "N")

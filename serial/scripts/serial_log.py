@@ -11,6 +11,7 @@ from pathlib import Path
 
 from serial_runtime import (
     get_serial_config,
+    get_mux_info,
     open_serial_port,
     save_project_config,
     update_state_entry,
@@ -49,6 +50,7 @@ def main():
     parser.add_argument("--duration", type=float, default=0, help="记录时长(秒)，0=无限")
     parser.add_argument("--format", choices=["text", "csv", "json"], default="text", help="输出格式")
     parser.add_argument("--console", action="store_true", help="同时输出到控制台(stderr)")
+    parser.add_argument("--direct", action="store_true", help="直连真实串口，跳过 mux")
     parser.add_argument("--json", action="store_true", help="最终输出 summary JSON")
     args = parser.parse_args()
 
@@ -88,7 +90,10 @@ def main():
         args.output = os.path.join(log_dir, f"serial_{ts}.{ext}")
 
     try:
-        ser = open_serial_port(cfg)
+        use_mux = not args.direct
+        ser = open_serial_port(cfg, use_mux=use_mux)
+        if use_mux and get_mux_info():
+            print("[mux] 已通过多路复用连接，请避免在 minicom 中同时写入以免串口数据冲突", file=sys.stderr)
     except Exception as e:
         error_exit("connect_failed", str(e), args.json)
 
