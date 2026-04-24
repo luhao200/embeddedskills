@@ -11,7 +11,6 @@ from pathlib import Path
 
 from serial_runtime import (
     get_serial_config,
-    get_mux_info,
     open_serial_port,
     save_project_config,
     update_state_entry,
@@ -122,7 +121,7 @@ def main():
     try:
         use_mux = not args.direct
         ser = open_serial_port(cfg, use_mux=use_mux)
-        if use_mux and get_mux_info():
+        if getattr(ser, "_serial_skill_using_mux", False):
             print("[mux] 已通过多路复用连接，请避免在 minicom 中同时写入以免串口数据冲突", file=sys.stderr)
         ser.timeout = 0.1
     except Exception as e:

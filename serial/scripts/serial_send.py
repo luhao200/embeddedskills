@@ -8,7 +8,6 @@ from pathlib import Path
 
 from serial_runtime import (
     get_serial_config,
-    get_mux_info,
     open_serial_port,
     save_project_config,
     update_state_entry,
@@ -106,7 +105,7 @@ def main():
     try:
         use_mux = not args.direct
         ser = open_serial_port(cfg, use_mux=use_mux)
-        if use_mux and get_mux_info():
+        if getattr(ser, "_serial_skill_using_mux", False):
             print("[mux] 警告: 通过多路复用发送数据，如 minicom 同时在写入会导致串口数据冲突", file=sys.stderr)
     except Exception as e:
         error_exit("connect_failed", str(e), args.json)

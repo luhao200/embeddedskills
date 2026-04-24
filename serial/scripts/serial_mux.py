@@ -1,15 +1,15 @@
-"""Serial 多路复用管理 — 基于 socat 将真实串口桥接到 TCP + 虚拟 PTY"""
+"""Serial 多路复用管理 — 单串口读者 + TCP 广播 + 虚拟 PTY"""
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import shutil
 import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -17,6 +17,7 @@ from serial_runtime import (
     get_serial_config,
     load_workspace_state,
     save_workspace_state,
+    save_project_config,
     is_missing,
     make_result,
     output_json,
@@ -40,33 +41,168 @@ def find_free_port(start: int = DEFAULT_MUX_PORT) -> int:
     return start
 
 
-def build_socat_serial_opts(config: dict) -> str:
-    """将 serial 配置转为 socat 串口选项字符串"""
-    opts = ["raw", "echo=0"]
-    opts.append(f"b{config['baudrate']}")
-    opts.append(f"cs{config['bytesize']}")
+def wait_for_tcp_server(port: int, process: subprocess.Popen, timeout: float = 2.0) -> bool:
+    """等待后台 mux TCP 服务可连接。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if process.poll() is not None:
+            return False
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                return True
+        except OSError:
+            time.sleep(0.05)
+    return process.poll() is None
 
-    parity = config.get("parity", "none")
-    if parity == "none":
-        opts.append("-parenb")
-    elif parity == "odd":
-        opts.append("parenb,parodd")
-    elif parity == "even":
-        opts.append("parenb,-parodd")
-    else:
-        opts.append("parenb")
 
-    stopbits = config.get("stopbits", 1)
-    if stopbits == 2:
-        opts.append("cstopb")
-    else:
-        opts.append("-cstopb")
+class SerialMuxServer:
+    """单进程打开真实串口，并把 RX 广播给所有 TCP 客户端。"""
 
-    return ",".join(opts)
+    def __init__(self, config: dict, tcp_port: int):
+        self.config = config
+        self.tcp_port = tcp_port
+        self.clients: set[socket.socket] = set()
+        self.clients_lock = threading.Lock()
+        self.serial_lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.server_sock: socket.socket | None = None
+        self.serial_port = None
+
+    def run(self) -> int:
+        try:
+            import serial
+
+            parity_map = {"none": "N", "even": "E", "odd": "O", "mark": "M", "space": "S"}
+            self.serial_port = serial.Serial(
+                port=self.config["port"],
+                baudrate=self.config["baudrate"],
+                bytesize=self.config["bytesize"],
+                parity=parity_map.get(self.config.get("parity", "none"), "N"),
+                stopbits=self.config["stopbits"],
+                timeout=0.1,
+            )
+            self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.server_sock.bind(("127.0.0.1", self.tcp_port))
+            self.server_sock.listen()
+            self.server_sock.settimeout(0.2)
+        except Exception as exc:
+            print(f"mux serve failed: {exc}", file=sys.stderr)
+            self.close()
+            return 1
+
+        signal.signal(signal.SIGINT, self._on_signal)
+        signal.signal(signal.SIGTERM, self._on_signal)
+
+        threads = [
+            threading.Thread(target=self._accept_loop, daemon=True),
+            threading.Thread(target=self._serial_read_loop, daemon=True),
+        ]
+        for thread in threads:
+            thread.start()
+
+        while not self.stop_event.is_set():
+            time.sleep(0.2)
+
+        self.close()
+        return 0
+
+    def _on_signal(self, sig, frame):
+        self.stop_event.set()
+
+    def _accept_loop(self):
+        while not self.stop_event.is_set():
+            try:
+                assert self.server_sock is not None
+                client, _addr = self.server_sock.accept()
+                client.settimeout(0.2)
+                with self.clients_lock:
+                    self.clients.add(client)
+                threading.Thread(target=self._client_read_loop, args=(client,), daemon=True).start()
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+
+    def _serial_read_loop(self):
+        while not self.stop_event.is_set():
+            try:
+                assert self.serial_port is not None
+                size = max(1, getattr(self.serial_port, "in_waiting", 0) or 1)
+                data = self.serial_port.read(size)
+                if data:
+                    self._broadcast(data)
+            except Exception:
+                self.stop_event.set()
+                break
+
+    def _client_read_loop(self, client: socket.socket):
+        while not self.stop_event.is_set():
+            try:
+                data = client.recv(4096)
+                if not data:
+                    break
+                with self.serial_lock:
+                    assert self.serial_port is not None
+                    self.serial_port.write(data)
+                    self.serial_port.flush()
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            except Exception:
+                self.stop_event.set()
+                break
+        self._remove_client(client)
+
+    def _broadcast(self, data: bytes):
+        dead = []
+        with self.clients_lock:
+            clients = list(self.clients)
+        for client in clients:
+            try:
+                client.sendall(data)
+            except OSError:
+                dead.append(client)
+        for client in dead:
+            self._remove_client(client)
+
+    def _remove_client(self, client: socket.socket):
+        with self.clients_lock:
+            self.clients.discard(client)
+        try:
+            client.close()
+        except OSError:
+            pass
+
+    def close(self):
+        self.stop_event.set()
+        with self.clients_lock:
+            clients = list(self.clients)
+            self.clients.clear()
+        for client in clients:
+            try:
+                client.close()
+            except OSError:
+                pass
+        if self.server_sock is not None:
+            try:
+                self.server_sock.close()
+            except OSError:
+                pass
+        if self.serial_port is not None:
+            try:
+                self.serial_port.close()
+            except Exception:
+                pass
+
+
+def run_mux_server(config: dict, tcp_port: int) -> int:
+    return SerialMuxServer(config, tcp_port).run()
 
 
 def start_mux(port: str, baudrate: int | None, workspace: str | None, vserial_link: str):
-    """启动 socat 多路复用"""
+    """启动串口多路复用"""
     if not shutil.which("socat"):
         return make_result(
             success=False,
@@ -117,18 +253,32 @@ def start_mux(port: str, baudrate: int | None, workspace: str | None, vserial_li
 
     tcp_port = find_free_port()
 
-    serial_opts = build_socat_serial_opts(cfg)
     real_port = cfg["port"]
 
-    # Layer 1: 真实串口 → TCP server (fork 模式)
-    cmd1 = ["socat", "-d", "-d", f"{real_port},{serial_opts}", f"TCP-LISTEN:{tcp_port},reuseaddr,fork"]
+    # Layer 1: Python 后台进程独占真实串口，并向所有 TCP 客户端广播 RX。
+    cmd1 = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "serve",
+        "--port",
+        real_port,
+        "--baudrate",
+        str(cfg["baudrate"]),
+        "--bytesize",
+        str(cfg["bytesize"]),
+        "--parity",
+        str(cfg["parity"]),
+        "--stopbits",
+        str(cfg["stopbits"]),
+        "--tcp-port",
+        str(tcp_port),
+    ]
     # Layer 2: TCP client → 虚拟 PTY (供 minicom)
     cmd2 = ["socat", "-d", "-d", f"PTY,link={vserial_link},raw,echo=0", f"TCP:127.0.0.1:{tcp_port}"]
 
     try:
         p1 = subprocess.Popen(cmd1, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(0.3)
-        if p1.poll() is not None:
+        if not wait_for_tcp_server(tcp_port, p1):
             return make_result(
                 success=False,
                 action="mux_start",
@@ -184,6 +334,14 @@ def start_mux(port: str, baudrate: int | None, workspace: str | None, vserial_li
     # 保存状态
     state[STATE_KEY] = mux_info
     save_workspace_state(state, workspace)
+    save_project_config(workspace, {
+        "port": real_port,
+        "baudrate": cfg["baudrate"],
+        "bytesize": cfg.get("bytesize", 8),
+        "parity": cfg.get("parity", "none"),
+        "stopbits": cfg.get("stopbits", 1),
+        "encoding": cfg.get("encoding", "utf-8"),
+    })
 
     return make_result(
         success=True,
@@ -194,7 +352,7 @@ def start_mux(port: str, baudrate: int | None, workspace: str | None, vserial_li
 
 
 def stop_mux(workspace: str | None = None):
-    """停止 socat 多路复用"""
+    """停止串口多路复用"""
     state = load_workspace_state(workspace)
     mux_info = state.get(STATE_KEY)
 
@@ -300,6 +458,24 @@ def status_mux(workspace: str | None = None):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        serve_parser = argparse.ArgumentParser(description="Serial mux 后台服务")
+        serve_parser.add_argument("--port", required=True)
+        serve_parser.add_argument("--baudrate", type=int, required=True)
+        serve_parser.add_argument("--bytesize", type=int, required=True)
+        serve_parser.add_argument("--parity", required=True)
+        serve_parser.add_argument("--stopbits", type=int, required=True)
+        serve_parser.add_argument("--tcp-port", type=int, required=True)
+        args = serve_parser.parse_args(sys.argv[2:])
+        config = {
+            "port": args.port,
+            "baudrate": args.baudrate,
+            "bytesize": args.bytesize,
+            "parity": args.parity,
+            "stopbits": args.stopbits,
+        }
+        sys.exit(run_mux_server(config, args.tcp_port))
+
     parser = argparse.ArgumentParser(description="Serial 多路复用管理")
     sub = parser.add_subparsers(dest="command", help="子命令")
 

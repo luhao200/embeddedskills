@@ -133,7 +133,7 @@ python scripts/serial_log.py [--port <串口>] [--baudrate <波特率>] [--outpu
 
 ## 串口多路复用 (Mux)
 
-当需要同时使用 minicom（或其他串口工具）和 skill 脚本访问同一个串口设备时，可以通过 socat 多路复用实现。
+当需要同时使用 minicom（或其他串口工具）和 skill 脚本访问同一个串口设备时，可以通过 mux 后台服务实现多路复用。
 
 ### 依赖
 
@@ -148,8 +148,8 @@ python scripts/serial_log.py [--port <串口>] [--baudrate <波特率>] [--outpu
                    └────────┬─────────┘
                             │
                    ┌────────▼─────────┐
-                   │   socat bridge    │
-                   │ TCP-LISTEN:20001  │  fork mode (多客户端)
+                   │ Python mux server │
+                   │ TCP-LISTEN:20001  │  单串口读者 + 广播
                    └────────┬─────────┘
                             │
             ┌───────────────┼───────────────┐
@@ -166,9 +166,9 @@ python scripts/serial_log.py [--port <串口>] [--baudrate <波特率>] [--outpu
    └───────────────┘
 ```
 
-- **Layer 1**: socat 打开真实串口，暴露 TCP server（`fork` 允许多客户端同时连接）
-- **Layer 2**: socat 创建虚拟 PTY `/tmp/serial_mux_vserial`，供 minicom 使用
-- **Skill 脚本**: 自动检测 mux 状态，通过 `socket://` 连接 TCP 端口
+- **Layer 1**: Python mux 进程独占打开真实串口，暴露 TCP server，并把串口 RX 广播给所有客户端
+- **Layer 2**: socat 作为 TCP 客户端创建虚拟 PTY `/tmp/serial_mux_vserial`，供 minicom 使用
+- **Skill 脚本**: 自动检测 mux 状态，仅当本次串口配置与 mux 匹配时通过 `socket://` 连接 TCP 端口
 - **数据流**: 串口 RX → 广播到所有 TCP 客户端；任一客户端 TX → 转发到真实串口
 
 ### Mux 管理命令
@@ -184,7 +184,7 @@ python scripts/serial_mux.py status
 python scripts/serial_mux.py stop
 ```
 
-启动后，skill 脚本（monitor/hex/log/send）自动通过多路复用连接，无需额外参数。
+启动后，skill 脚本（monitor/hex/log/send）自动通过多路复用连接，无需额外参数。若命令显式指定了不同串口或串口参数，则不会复用当前 mux。
 
 ### 使用流程
 
@@ -200,7 +200,7 @@ python scripts/serial_mux.py stop
 
 ### Mux 状态持久化
 
-mux 进程 PID 保存到 `.embeddedskills/state.json` 的 `serial_mux` 段。脚本退出后下次调用 `status` 会检测进程是否仍存活，自动清理僵尸 PID。`stop` 命令会终止 socat 进程并删除残留的 `/tmp/serial_mux_vserial` 符号链接。
+mux 进程 PID 保存到 `.embeddedskills/state.json` 的 `serial_mux` 段。脚本退出后下次调用 `status` 会检测进程是否仍存活，自动清理僵尸 PID。`start` 成功后会把已确认的串口配置写回 `.embeddedskills/config.json`，方便后续无参命令复用。`stop` 命令会终止 mux 与 socat PTY 进程，并删除残留的 `/tmp/serial_mux_vserial` 符号链接。
 
 ## 核心规则
 

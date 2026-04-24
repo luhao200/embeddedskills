@@ -390,21 +390,58 @@ def get_mux_info(workspace: str | None = None) -> dict | None:
     return mux_info
 
 
+def _normalize_serial_port(value: Any) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    if os.name == "nt":
+        return os.path.normcase(text)
+    if text.startswith("/"):
+        return os.path.realpath(text)
+    return text
+
+
+def config_matches_mux(config: dict, mux_info: dict) -> bool:
+    """确认当前串口配置与运行中的 mux 指向同一串口。"""
+    if _normalize_serial_port(config.get("port")) != _normalize_serial_port(mux_info.get("real_port")):
+        return False
+
+    checks = (
+        ("baudrate", 115200),
+        ("bytesize", 8),
+        ("parity", "none"),
+        ("stopbits", 1),
+    )
+    for key, default in checks:
+        if str(config.get(key, default)).lower() != str(mux_info.get(key, default)).lower():
+            return False
+    return True
+
+
+def get_matching_mux_info(config: dict, workspace: str | None = None) -> dict | None:
+    """仅在 mux 与本次解析出的串口配置一致时返回 mux 信息。"""
+    mux_info = get_mux_info(workspace)
+    if mux_info and config_matches_mux(config, mux_info):
+        return mux_info
+    return None
+
+
 def open_serial_port(config: dict, use_mux: bool = True):
     """根据配置打开串口连接。
 
-    当 mux 运行时自动通过 socket:// 连接 TCP 端口，
+    当 mux 运行且串口配置匹配时自动通过 socket:// 连接 TCP 端口，
     从而实现与 minicom 同时访问串口。
     use_mux=False 时跳过 mux 检测，直接打开真实串口。
     """
     import serial
 
     if use_mux:
-        mux = get_mux_info()
+        mux = get_matching_mux_info(config)
         if mux:
             url = f"socket://127.0.0.1:{mux['tcp_port']}"
             ser = serial.serial_for_url(url)
             ser.timeout = config.get("timeout_sec", 1.0)
+            setattr(ser, "_serial_skill_using_mux", True)
             return ser
 
     PARITY_MAP = {"none": "N", "even": "E", "odd": "O", "mark": "M", "space": "S"}
