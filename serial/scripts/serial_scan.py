@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+from serial_runtime import get_mux_info
+
 COMMON_DEVICES_PATH = Path(__file__).parent.parent / "references" / "common_devices.json"
 
 
@@ -78,12 +80,21 @@ def main():
             print(f"错误: {err}", file=sys.stderr)
         sys.exit(1)
 
+    mux_info = get_mux_info()
     result = {
         "status": "ok",
         "action": "scan",
         "summary": f"发现 {len(ports)} 个串口",
         "details": {"ports": ports},
     }
+    if mux_info:
+        result["details"]["mux"] = {
+            "running": True,
+            "vserial": mux_info["vserial"],
+            "tcp_port": mux_info["tcp_port"],
+            "real_port": mux_info["real_port"],
+        }
+        result["summary"] += f" (Mux 运行中: {mux_info['vserial']})"
 
     if args.json:
         output_json(result)
@@ -96,6 +107,8 @@ def main():
                 chip = f" [{p['chip']}]" if p["chip"] else ""
                 vid_pid = f" (VID:{p['vid']} PID:{p['pid']})" if p["vid"] else ""
                 print(f"  {p['port']}: {p['description']}{chip}{vid_pid}")
+        if mux_info:
+            print(f"\nMux 运行中: {mux_info['real_port']} -> TCP:{mux_info['tcp_port']} -> PTY:{mux_info['vserial']}")
 
 
 if __name__ == "__main__":

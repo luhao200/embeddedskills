@@ -8,6 +8,7 @@ from pathlib import Path
 
 from serial_runtime import (
     get_serial_config,
+    get_mux_info,
     open_serial_port,
     save_project_config,
     update_state_entry,
@@ -66,6 +67,7 @@ def main():
     parser.add_argument("--interval", type=float, default=0.1, help="重复间隔（秒）")
     parser.add_argument("--wait-response", action="store_true", help="等待响应")
     parser.add_argument("--response-timeout", type=float, default=2.0, help="响应超时（秒）")
+    parser.add_argument("--direct", action="store_true", help="直连真实串口，跳过 mux")
     parser.add_argument("--json", action="store_true", help="JSON 输出")
     args = parser.parse_args()
 
@@ -102,7 +104,10 @@ def main():
         error_exit("bad_hex", "Hex 解析失败，请检查输入格式", args.json)
 
     try:
-        ser = open_serial_port(cfg)
+        use_mux = not args.direct
+        ser = open_serial_port(cfg, use_mux=use_mux)
+        if use_mux and get_mux_info():
+            print("[mux] 警告: 通过多路复用发送数据，如 minicom 同时在写入会导致串口数据冲突", file=sys.stderr)
     except Exception as e:
         error_exit("connect_failed", str(e), args.json)
 

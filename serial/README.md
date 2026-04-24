@@ -14,6 +14,7 @@ Claude Code skill，用于嵌入式串口调试：端口扫描、实时监控、
 
 - Python 3.x
 - [pyserial](https://pypi.org/project/pyserial/) — `pip install pyserial`
+- [socat](http://www.dest-unreach.org/socat/) — `apt install socat` / `pacman -S socat`（多路复用功能需要）
 - USB 转串口芯片驱动（CH340、CP2102、FT232 等，按硬件安装对应驱动）
 
 ## 配置

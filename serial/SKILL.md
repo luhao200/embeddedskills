@@ -131,6 +131,77 @@ python scripts/serial_log.py [--port <串口>] [--baudrate <波特率>] [--outpu
 }
 ```
 
+## 串口多路复用 (Mux)
+
+当需要同时使用 minicom（或其他串口工具）和 skill 脚本访问同一个串口设备时，可以通过 socat 多路复用实现。
+
+### 依赖
+
+- **socat** — `apt install socat` / `pacman -S socat`
+
+### 架构
+
+```
+                   ┌──────────────────┐
+                   │   Real Hardware   │
+                   │   /dev/ttyUSB0    │
+                   └────────┬─────────┘
+                            │
+                   ┌────────▼─────────┐
+                   │   socat bridge    │
+                   │ TCP-LISTEN:20001  │  fork mode (多客户端)
+                   └────────┬─────────┘
+                            │
+            ┌───────────────┼───────────────┐
+            │               │               │
+   ┌────────▼──────┐ ┌─────▼──────┐ ┌──────▼────────┐
+   │  socat PTY    │ │ skill      │ │ skill         │
+   │ /tmp/serial_  │ │ monitor    │ │ send/log/hex  │
+   │ mux_vserial   │ │ socket://  │ │ socket://     │
+   └───────┬───────┘ └────────────┘ └───────────────┘
+           │
+   ┌───────▼───────┐
+   │   minicom     │
+   │  (用户侧)      │
+   └───────────────┘
+```
+
+- **Layer 1**: socat 打开真实串口，暴露 TCP server（`fork` 允许多客户端同时连接）
+- **Layer 2**: socat 创建虚拟 PTY `/tmp/serial_mux_vserial`，供 minicom 使用
+- **Skill 脚本**: 自动检测 mux 状态，通过 `socket://` 连接 TCP 端口
+- **数据流**: 串口 RX → 广播到所有 TCP 客户端；任一客户端 TX → 转发到真实串口
+
+### Mux 管理命令
+
+```bash
+# 启动多路复用
+python scripts/serial_mux.py start --port /dev/ttyUSB0 [--baudrate 115200]
+
+# 查询状态
+python scripts/serial_mux.py status
+
+# 停止多路复用
+python scripts/serial_mux.py stop
+```
+
+启动后，skill 脚本（monitor/hex/log/send）自动通过多路复用连接，无需额外参数。
+
+### 使用流程
+
+1. `python scripts/serial_mux.py start --port /dev/ttyUSB0`
+2. `minicom -D /tmp/serial_mux_vserial`（用户侧交互）
+3. `python scripts/serial_monitor.py`（模型侧监控，自动走 mux）
+4. 两个终端同时看到串口数据
+5. `python scripts/serial_mux.py stop` 停止复用（终止 socat 进程并清理 `/tmp/serial_mux_vserial` 符号链接）
+
+### 写入冲突警告
+
+**多客户端同时写入会导致串口数据错乱。** 监控/hex/log 脚本在通过 mux 连接时输出警告到 stderr。send 脚本输出更强的冲突警告。如需直连真实串口（跳过 mux），使用 `--direct` 参数。
+
+### Mux 状态持久化
+
+mux 进程 PID 保存到 `.embeddedskills/state.json` 的 `serial_mux` 段。脚本退出后下次调用 `status` 会检测进程是否仍存活，自动清理僵尸 PID。`stop` 命令会终止 socat 进程并删除残留的 `/tmp/serial_mux_vserial` 符号链接。
+
 ## 核心规则
 
 - 不自动猜测端口和波特率，发现多个候选串口时不自动选择
@@ -140,6 +211,7 @@ python scripts/serial_log.py [--port <串口>] [--baudrate <波特率>] [--outpu
 - 未明确说明用途时不主动发送任何串口数据
 - `--json` 输出的持续流使用 JSON Lines，摘要写 stderr 不污染数据流
 - 正则过滤失败不应导致监控退出
+- Mux 运行中发送数据前提示用户避免同时写入
 
 ## 参考
 
