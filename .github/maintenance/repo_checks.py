@@ -14,7 +14,7 @@ SKIP_DIRECTORIES = {".git", ".venv", "__pycache__", "dist"}
 
 
 def repository_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def matching_files(root: Path, pattern: str) -> list[Path]:

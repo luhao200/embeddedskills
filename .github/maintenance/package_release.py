@@ -13,7 +13,7 @@ EXCLUDED_PARTS = {".git", ".github", ".venv", "__pycache__", "dist", "tests"}
 
 
 def repository_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def normalized_version(root: Path, requested: str | None) -> str:
