@@ -30,6 +30,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("ClearAllForwardings=yes", rendered)
         self.assertIn("ForwardAgent=no", rendered)
         self.assertIn("PermitLocalCommand=no", rendered)
+        self.assertIn("ProxyCommand=none", rendered)
         self.assertEqual(command[-2], "test-gpu")
 
     def test_accept_new_host_key_must_be_explicit(self) -> None:

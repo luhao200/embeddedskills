@@ -123,6 +123,8 @@ python scripts/ssh_probe.py <别名>
 探测脚本只执行内置只读命令，并输出结构化 JSON。它默认启用非交互认证、
 禁止端口和 Agent 转发，并要求主机指纹已经可信。需要先查看命令时使用
 `--dry-run`；只有确认新设备可信时才使用 `--accept-new-host-key`。
+探测入口显式禁用 SSH 配置中的 `ProxyCommand`，不要用它连接必须依赖代理
+命令的目标。
 
 ### 上传文件
 
