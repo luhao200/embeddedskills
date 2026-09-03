@@ -56,8 +56,13 @@ class ProbeTests(unittest.TestCase):
                 build_command(arguments(**{name: 0}))
 
     def test_known_hosts_file_rejects_control_characters(self) -> None:
+        for value in ("known_hosts\nProxyCommand=x", "known_hosts\x7fmalicious"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                build_command(arguments(known_hosts_file=value))
+
+    def test_alias_rejects_delete_control_character(self) -> None:
         with self.assertRaises(ValueError):
-            build_command(arguments(known_hosts_file="known_hosts\nProxyCommand=x"))
+            validate_alias("test\x7fhost")
 
     def test_probe_output_is_structured(self) -> None:
         result = parse_probe_output(

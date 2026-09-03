@@ -22,7 +22,9 @@ def matching_files(root: Path, pattern: str) -> list[Path]:
         path
         for path in root.rglob(pattern)
         if path.is_file()
-        and not any(part in SKIP_DIRECTORIES for part in path.parts)
+        and not any(
+            part in SKIP_DIRECTORIES for part in path.relative_to(root).parts
+        )
     )
 
 

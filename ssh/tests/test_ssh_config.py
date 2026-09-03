@@ -112,8 +112,9 @@ Host a-metadata-alias
         self.assertEqual(matches[0]["alias"], "test-4090d")
 
     def test_config_metadata_must_remain_on_one_line(self) -> None:
-        with self.assertRaises(ValueError):
-            validate_single_line_field("groups", "test\nHost injected")
+        for value in ("test\nHost injected", "test\x7fHost injected"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_single_line_field("groups", value)
 
     def test_add_rejects_newline_in_port(self) -> None:
         with self.assertRaises(ValueError):
