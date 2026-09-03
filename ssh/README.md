@@ -60,6 +60,8 @@ Host internal-dev
 | 字段 | 说明 |
 |------|------|
 | `description` | 设备或服务器说明 |
+| `aliases` | 用户习惯称呼，逗号分隔；可用于精确解析 |
+| `groups` | 逻辑环境或主机组，逗号分隔；允许多台主机共享 |
 | `tags` | 逗号分隔的标签 |
 | `location` | 位置或环境 |
 
@@ -79,7 +81,22 @@ python scripts/ssh_config.py list
 
 ```bash
 python scripts/ssh_config.py find <关键词>
+python scripts/ssh_config.py find <环境关键词> <能力关键词>
 ```
+
+多个关键词采用 AND 语义。例如，先用 `groups` 标记测试环境成员，再用
+`tags` 标记硬件能力后，`find 测试环境 4090D` 只返回同时满足两个条件的主机。
+`search` 是 `find` 的等价命令。
+
+### 确定唯一服务器
+
+```bash
+python scripts/ssh_config.py resolve <关键词...>
+```
+
+`resolve` 只有在结果唯一时才成功。没有匹配返回退出码 1；存在多个候选时
+返回退出码 2 和候选列表，避免 AI 在共享环境名称下擅自选择主机。OpenSSH
+`Host` 的精确别名优先于模糊匹配。
 
 ### 验证别名解析
 
@@ -99,6 +116,8 @@ python scripts/ssh_config.py add <别名> --host <IP或域名> --user <用户> -
 
 ```bash
 --description "说明"
+--aliases "常用名称1,常用名称2"
+--groups "环境1,环境2"
 --tags tag1,tag2
 --location "位置"
 --proxy-jump <跳板机别名>

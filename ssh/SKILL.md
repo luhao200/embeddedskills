@@ -65,7 +65,20 @@ python scripts/ssh_config.py list
 
 ```bash
 python scripts/ssh_config.py find <关键词>
+python scripts/ssh_config.py find <环境关键词> <能力关键词>
 ```
+
+多个关键词使用 AND 匹配。先用环境组缩小范围，再用设备别名或标签确定目标。
+`search` 是 `find` 的等价命令。
+
+### 确定唯一服务器
+
+```bash
+python scripts/ssh_config.py resolve <关键词...>
+```
+
+仅在结果唯一时继续。退出码 2 表示存在多个候选；必须向用户确认，不能自动
+选择第一项。精确的 OpenSSH `Host` 别名优先。
 
 ### 验证别名解析
 
@@ -85,6 +98,8 @@ python scripts/ssh_config.py add <别名> --host <IP或域名> --user <用户> -
 
 ```bash
 --description "说明"
+--aliases "常用名称1,常用名称2"
+--groups "环境1,环境2"
 --tags tag1,tag2
 --location "位置"
 --proxy-jump <跳板机别名>
@@ -124,6 +139,8 @@ python scripts/ssh_tunnel.py <别名> --local-port <本地端口> --remote-host 
 
 ```ssh-config
 # description: 开发板
+# aliases: 测试板,主控板
+# groups: 实验室测试环境
 # tags: embedded,linux
 # location: lab
 Host 1380-P904
@@ -151,6 +168,8 @@ Host internal-dev
 允许保留注释元数据：
 
 - `description`
+- `aliases`
+- `groups`
 - `tags`
 - `location`
 
