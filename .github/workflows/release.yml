@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate repository
+        run: python tools/repo_checks.py
+      - name: Run tests
+        run: python tools/run_tests.py
+      - name: Build release archives
+        run: python tools/package_release.py --version "${GITHUB_REF_NAME#v}"
+      - name: Verify checksums
+        working-directory: dist
+        run: sha256sum --check SHA256SUMS
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+          fi

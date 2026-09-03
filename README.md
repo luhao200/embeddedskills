@@ -9,6 +9,7 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/status-active-success?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/zhinkgit/embeddedskills?style=flat-square)](https://github.com/zhinkgit/embeddedskills/stargazers)
+[![CI](https://github.com/zhinkgit/embeddedskills/actions/workflows/ci.yml/badge.svg)](https://github.com/zhinkgit/embeddedskills/actions/workflows/ci.yml)
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-black?style=flat-square&logo=anthropic&logoColor=white)](https://claude.ai/code)
 [![OpenAI Codex CLI](https://img.shields.io/badge/OpenAI_Codex_CLI-412991?style=flat-square&logo=openai&logoColor=white)](https://github.com/openai/codex)
@@ -100,6 +101,7 @@ npx skills add https://github.com/zhinkgit/embeddedskills -g -y
 |:---:|:---:|---|---|
 | 🔨 构建 | **keil** | Keil MDK 工程扫描、Target 枚举、编译、重建、清理 | `scan` `targets` `build` `rebuild` `clean` `flash` |
 | 🔨 构建 | **gcc** | CMake 型 GCC 工程配置、编译、大小分析 | `scan` `presets` `configure` `build` `rebuild` `size` |
+| 🔨 构建 | **eide** | EIDE 工程扫描、配置枚举、构建和大小分析 | `scan` `configs` `build` `rebuild` `clean` `size` |
 | 🔬 调试 | **jlink** | 烧录、读写内存/寄存器、RTT/SWO、GDB 调试 | `flash` `read-mem` `write-mem` `regs` `rtt` `swo` + GDB |
 | 🔬 调试 | **openocd** | 烧录、擦除、GDB/Telnet、Semihosting/ITM | `flash` `erase` `reset` `gdb-server` `semihosting` `itm` |
 | 🔬 调试 | **probe-rs** | 探针发现、烧录、复位、内存读写、GDB 调试、RTT | `list` `info` `flash` `erase` `reset` `read-mem` `write-mem` `gdb` `rtt` |
