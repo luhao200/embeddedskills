@@ -7,12 +7,17 @@ import unittest
 SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from ssh_probe import build_command, parse_probe_output, validate_alias  # noqa: E402
+from ssh_probe import (  # noqa: E402
+    build_command,
+    parse_probe_output,
+    validate_alias,
+)
 
 
 def arguments(**overrides: object) -> argparse.Namespace:
     values = {
         "alias": "test-gpu",
+        "timeout": 30,
         "connect_timeout": 7,
         "accept_new_host_key": False,
         "known_hosts_file": None,
@@ -44,6 +49,15 @@ class ProbeTests(unittest.TestCase):
     def test_alias_rejects_whitespace(self) -> None:
         with self.assertRaises(ValueError):
             validate_alias("test gpu")
+
+    def test_timeouts_must_be_positive(self) -> None:
+        for name in ("timeout", "connect_timeout"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                build_command(arguments(**{name: 0}))
+
+    def test_known_hosts_file_rejects_control_characters(self) -> None:
+        with self.assertRaises(ValueError):
+            build_command(arguments(known_hosts_file="known_hosts\nProxyCommand=x"))
 
     def test_probe_output_is_structured(self) -> None:
         result = parse_probe_output(

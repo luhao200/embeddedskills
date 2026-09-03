@@ -108,7 +108,7 @@ npx skills add https://github.com/zhinkgit/embeddedskills -g -y
 | 🔌 Communication | **serial** | Scan serial ports, real-time monitor, send data, hex view | `scan` `monitor` `send` `hex` `log` |
 | 🔌 Communication | **can** | CAN/CAN-FD monitoring, send frames, DBC decode, statistics | `scan` `monitor` `send` `decode` `stats` |
 | 🔌 Communication | **net** | Packet capture analysis, connectivity test, port scan, traffic stats | `capture` `analyze` `ping` `scan` `stats` |
-| 🔌 Communication | **ssh** | SSH config, remote commands, upload/download, jump hosts, and port forwarding | `list` `find` `show` `add` + exec/transfer/tunnel |
+| 🔌 Communication | **ssh** | SSH config, environment resolution, read-only probes, remote commands, transfers, jump hosts, and tunnels | `list` `find` `resolve` `show` `add` + exec/probe/transfer/tunnel |
 | 🔌 Communication | **terminal** | Bidirectional serial, SSH, and local shell sessions | `start` `send` `read` `attach` `stop` |
 | 🎯 Orchestration | **workflow** | Auto-detect project → Select toolchain → Orchestrate full flow | `plan` `build` `build-flash` `build-debug` `observe` `diagnose` |
 

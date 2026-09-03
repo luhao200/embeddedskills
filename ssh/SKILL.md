@@ -124,7 +124,8 @@ python scripts/ssh_probe.py <别名>
 禁止端口和 Agent 转发，并要求主机指纹已经可信。需要先查看命令时使用
 `--dry-run`；只有确认新设备可信时才使用 `--accept-new-host-key`。
 探测入口显式禁用 SSH 配置中的 `ProxyCommand`，不要用它连接必须依赖代理
-命令的目标。
+命令的目标。OpenSSH 仍会解析用户配置；配置中存在 `Match exec` 时可能执行
+本地命令，因此只对可信的 SSH 配置使用探测入口。
 
 ### 上传文件
 

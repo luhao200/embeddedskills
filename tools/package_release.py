@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import hashlib
+import os
 import re
 import subprocess
 import zipfile
@@ -8,7 +9,7 @@ from pathlib import Path
 
 
 FIXED_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
-EXCLUDED_PARTS = {".git", ".github", ".venv", "__pycache__", "tests"}
+EXCLUDED_PARTS = {".git", ".github", ".venv", "__pycache__", "dist", "tests"}
 
 
 def repository_root() -> Path:
@@ -27,14 +28,68 @@ def normalized_version(root: Path, requested: str | None) -> str:
         )
         version = process.stdout.strip()
     version = version.removeprefix("v")
+    return validate_version(version)
+
+
+def validate_version(version: str) -> str:
     if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._-]*", version):
         raise ValueError(f"invalid release version: {version!r}")
     return version
 
 
-def included(path: Path, root: Path) -> bool:
+def included(path: Path, root: Path, output_directory: Path | None = None) -> bool:
     relative = path.relative_to(root)
-    return not any(part in EXCLUDED_PARTS for part in relative.parts)
+    if any(part in EXCLUDED_PARTS for part in relative.parts):
+        return False
+    if output_directory and is_output_path(path, root, output_directory):
+        return False
+    return True
+
+
+def is_output_path(path: Path, root: Path, output_directory: Path) -> bool:
+    return output_directory.is_relative_to(root) and path.resolve().is_relative_to(
+        output_directory
+    )
+
+
+def collect_tree_files(
+    directory: Path,
+    root: Path,
+    output_directory: Path,
+) -> list[Path]:
+    files: list[Path] = []
+    for current, directory_names, file_names in os.walk(
+        directory, topdown=True, followlinks=False
+    ):
+        current_directory = Path(current)
+        included_directories: list[str] = []
+        for name in directory_names:
+            path = current_directory / name
+            resolved = path.resolve()
+            if is_output_path(path, root, output_directory):
+                continue
+            if path.is_symlink() or not resolved.is_relative_to(root):
+                raise ValueError(
+                    "release input must not escape through a link: "
+                    f"{path.relative_to(root)}"
+                )
+            if included(path, root, output_directory):
+                included_directories.append(name)
+        directory_names[:] = included_directories
+
+        for name in file_names:
+            path = current_directory / name
+            resolved = path.resolve()
+            if is_output_path(path, root, output_directory):
+                continue
+            if path.is_symlink() or not resolved.is_relative_to(root):
+                raise ValueError(
+                    "release input must not escape through a link: "
+                    f"{path.relative_to(root)}"
+                )
+            if included(path, root, output_directory):
+                files.append(path)
+    return files
 
 
 def write_zip(archive: Path, root: Path, files: list[Path]) -> None:
@@ -50,29 +105,55 @@ def write_zip(archive: Path, root: Path, files: list[Path]) -> None:
 def build_archives(root: Path, output_directory: Path, version: str) -> list[Path]:
     root = root.resolve()
     output_directory = output_directory.resolve()
+    version = validate_version(version)
     if output_directory == root:
         raise ValueError("release output directory must not be the repository root")
 
+    skill_directories: list[Path] = []
+    for path in root.iterdir():
+        resolved = path.resolve()
+        if is_output_path(path, root, output_directory):
+            continue
+        if (path.is_symlink() or not resolved.is_relative_to(root)) and (
+            path / "SKILL.md"
+        ).is_file():
+            raise ValueError(
+                f"release skill directory must not escape through a link: {path.name}"
+            )
+        if (
+            path.is_dir()
+            and included(path, root, output_directory)
+            and (path / "SKILL.md").is_file()
+        ):
+            skill_directories.append(path)
+    skill_directories.sort()
+
     output_directory.mkdir(parents=True, exist_ok=True)
-    for stale_archive in output_directory.glob("embeddedskills-*.zip"):
-        stale_archive.unlink()
+    archive_name = f"embeddedskills-{version}.zip"
+    stale_archives = [
+        output_directory / archive_name,
+        *output_directory.glob(f"embeddedskills-*-{version}.zip"),
+    ]
+    for archive in stale_archives:
+        if archive.exists():
+            archive.unlink()
     checksum_file = output_directory / "SHA256SUMS"
     if checksum_file.exists():
         checksum_file.unlink()
 
-    skill_directories = sorted(
-        path for path in root.iterdir() if path.is_dir() and (path / "SKILL.md").is_file()
-    )
     runtime_files = [
-        path for path in root.iterdir() if path.is_file() and included(path, root)
+        path
+        for path in root.iterdir()
+        if path.is_file() and included(path, root, output_directory)
     ]
+    for path in runtime_files:
+        if path.is_symlink() or not path.resolve().is_relative_to(root):
+            raise ValueError(
+                f"release input must not escape through a link: {path.relative_to(root)}"
+            )
     for directory in [root / "docs", *skill_directories]:
         if directory.is_dir():
-            runtime_files.extend(
-                path
-                for path in directory.rglob("*")
-                if path.is_file() and included(path, root)
-            )
+            runtime_files.extend(collect_tree_files(directory, root, output_directory))
 
     archives: list[Path] = []
     bundle = output_directory / f"embeddedskills-{version}.zip"
@@ -81,12 +162,10 @@ def build_archives(root: Path, output_directory: Path, version: str) -> list[Pat
 
     for skill_directory in skill_directories:
         files = [root / "LICENSE"]
-        files.extend(
-            path
-            for path in skill_directory.rglob("*")
-            if path.is_file() and included(path, root)
+        files.extend(collect_tree_files(skill_directory, root, output_directory))
+        archive = (
+            output_directory / f"embeddedskills-{skill_directory.name}-{version}.zip"
         )
-        archive = output_directory / f"embeddedskills-{skill_directory.name}-{version}.zip"
         write_zip(archive, root, files)
         archives.append(archive)
     return archives

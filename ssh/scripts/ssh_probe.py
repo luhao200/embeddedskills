@@ -27,8 +27,20 @@ def validate_alias(alias: str) -> None:
         raise ValueError("alias must not contain whitespace or control characters")
 
 
-def build_command(args: argparse.Namespace) -> list[str]:
+def validate_arguments(args: argparse.Namespace) -> None:
     validate_alias(args.alias)
+    if args.timeout <= 0:
+        raise ValueError("timeout must be greater than zero")
+    if args.connect_timeout <= 0:
+        raise ValueError("connect-timeout must be greater than zero")
+    if args.known_hosts_file and any(
+        ord(character) < 32 for character in args.known_hosts_file
+    ):
+        raise ValueError("known-hosts-file must not contain control characters")
+
+
+def build_command(args: argparse.Namespace) -> list[str]:
+    validate_arguments(args)
     command = [
         "ssh",
         "-T",

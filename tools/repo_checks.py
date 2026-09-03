@@ -17,11 +17,12 @@ def repository_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def files_with_suffix(root: Path, suffix: str) -> list[Path]:
+def matching_files(root: Path, pattern: str) -> list[Path]:
     return sorted(
         path
-        for path in root.rglob(f"*{suffix}")
-        if not any(part in SKIP_DIRECTORIES for part in path.parts)
+        for path in root.rglob(pattern)
+        if path.is_file()
+        and not any(part in SKIP_DIRECTORIES for part in path.parts)
     )
 
 
@@ -32,16 +33,32 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
         raise ValueError("missing frontmatter enclosed by ---")
 
     values: dict[str, str] = {}
+    block_key: str | None = None
     for line in match.group(1).splitlines():
+        if line[:1].isspace() and block_key:
+            continuation = line.strip()
+            if continuation:
+                values[block_key] = " ".join(
+                    part for part in (values[block_key], continuation) if part
+                )
+            continue
+
+        block_key = None
         key, separator, value = line.partition(":")
         if separator:
-            values[key.strip()] = value.strip()
+            key = key.strip()
+            value = value.strip()
+            if value in {">", ">-", ">+", "|", "|-", "|+"}:
+                values[key] = ""
+                block_key = key
+            else:
+                values[key] = value
     return values
 
 
 def check_skill_metadata(root: Path) -> list[str]:
     errors: list[str] = []
-    for path in files_with_suffix(root, "SKILL.md"):
+    for path in matching_files(root, "SKILL.md"):
         try:
             metadata = parse_frontmatter(path)
         except ValueError as exc:
@@ -60,7 +77,7 @@ def check_skill_metadata(root: Path) -> list[str]:
 
 def check_python_syntax(root: Path) -> list[str]:
     errors: list[str] = []
-    for path in files_with_suffix(root, ".py"):
+    for path in matching_files(root, "*.py"):
         try:
             ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         except (SyntaxError, UnicodeDecodeError) as exc:
@@ -70,7 +87,7 @@ def check_python_syntax(root: Path) -> list[str]:
 
 def check_json(root: Path) -> list[str]:
     errors: list[str] = []
-    for path in files_with_suffix(root, ".json"):
+    for path in matching_files(root, "*.json"):
         try:
             json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -93,7 +110,7 @@ def local_link_target(raw_target: str) -> str | None:
 
 def check_markdown_links(root: Path) -> list[str]:
     errors: list[str] = []
-    for path in files_with_suffix(root, ".md"):
+    for path in matching_files(root, "*.md"):
         text = path.read_text(encoding="utf-8")
         for match in LINK_PATTERN.finditer(text):
             target = local_link_target(match.group(1))

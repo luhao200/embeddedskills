@@ -4,6 +4,9 @@ import sys
 from pathlib import Path
 
 
+SKIP_DIRECTORIES = {".git", ".venv", "__pycache__", "dist"}
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     test_directories = sorted(
@@ -11,8 +14,7 @@ def main() -> int:
         for path in root.rglob("tests")
         if path.is_dir()
         and any(path.glob("test_*.py"))
-        and ".git" not in path.parts
-        and "__pycache__" not in path.parts
+        and not any(part in SKIP_DIRECTORIES for part in path.parts)
     )
     if not test_directories:
         print("No test directories found.")
