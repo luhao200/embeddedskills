@@ -9,6 +9,7 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/status-active-success?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/zhinkgit/embeddedskills?style=flat-square)](https://github.com/zhinkgit/embeddedskills/stargazers)
+[![CI](https://github.com/zhinkgit/embeddedskills/actions/workflows/ci.yml/badge.svg)](https://github.com/zhinkgit/embeddedskills/actions/workflows/ci.yml)
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-black?style=flat-square&logo=anthropic&logoColor=white)](https://claude.ai/code)
 [![OpenAI Codex CLI](https://img.shields.io/badge/OpenAI_Codex_CLI-412991?style=flat-square&logo=openai&logoColor=white)](https://github.com/openai/codex)
@@ -100,6 +101,7 @@ npx skills add https://github.com/zhinkgit/embeddedskills -g -y
 |:---:|:---:|---|---|
 | 🔨 Build | **keil** | Keil MDK project scan, Target enumeration, compile, rebuild, clean | `scan` `targets` `build` `rebuild` `clean` `flash` |
 | 🔨 Build | **gcc** | CMake-based GCC project configuration, compile, size analysis | `scan` `presets` `configure` `build` `rebuild` `size` |
+| 🔨 Build | **eide** | EIDE project scan, configuration discovery, build, and size analysis | `scan` `configs` `build` `rebuild` `clean` `size` |
 | 🔬 Debug | **jlink** | Flash, read/write memory/registers, RTT/SWO, GDB debug | `flash` `read-mem` `write-mem` `regs` `rtt` `swo` + GDB |
 | 🔬 Debug | **openocd** | Flash, erase, GDB/Telnet, Semihosting/ITM | `flash` `erase` `reset` `gdb-server` `semihosting` `itm` |
 | 🔬 Debug | **probe-rs** | Probe discovery, flashing, reset, memory access, GDB debug, RTT | `list` `info` `flash` `erase` `reset` `read-mem` `write-mem` `gdb` `rtt` |
