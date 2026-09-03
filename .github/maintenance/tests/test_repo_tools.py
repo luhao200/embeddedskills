@@ -1,11 +1,16 @@
 import os
+import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
 
-from tools.package_release import build_archives, write_checksums
-from tools.repo_checks import (
+MAINTENANCE_DIR = Path(__file__).resolve().parents[1]
+if str(MAINTENANCE_DIR) not in sys.path:
+    sys.path.insert(0, str(MAINTENANCE_DIR))
+
+from package_release import build_archives, write_checksums
+from repo_checks import (
     check_i18n_entrypoints,
     check_skill_metadata,
     local_link_target,

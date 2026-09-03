@@ -8,7 +8,7 @@ SKIP_DIRECTORIES = {".git", ".venv", "__pycache__", "dist"}
 
 
 def main() -> int:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     test_directories = sorted(
         path
         for path in root.rglob("tests")

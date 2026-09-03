@@ -27,11 +27,11 @@ jobs:
         with:
           python-version: "3.13"
       - name: Validate repository
-        run: python tools/repo_checks.py
+        run: python .github/maintenance/repo_checks.py
       - name: Run tests
-        run: python tools/run_tests.py
+        run: python .github/maintenance/run_tests.py
       - name: Build release archives
-        run: python tools/package_release.py --version "${GITHUB_REF_NAME#v}"
+        run: python .github/maintenance/package_release.py --version "${GITHUB_REF_NAME#v}"
       - name: Verify checksums
         working-directory: dist
         run: sha256sum --check SHA256SUMS
