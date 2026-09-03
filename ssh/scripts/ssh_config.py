@@ -2,7 +2,6 @@
 import argparse
 import datetime as _dt
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -12,6 +11,7 @@ from pathlib import Path
 LIST_METADATA_KEYS = {"aliases", "groups", "tags"}
 TEXT_METADATA_KEYS = {"description", "location"}
 SUPPORTED_METADATA_KEYS = LIST_METADATA_KEYS | TEXT_METADATA_KEYS
+WILDCARD_CHARACTERS = "*?"
 
 
 def ssh_config_path() -> Path:
@@ -37,20 +37,26 @@ def parse_hosts(lines: list[str]) -> list[dict]:
 
     for line in lines:
         stripped = line.strip()
-        if stripped.startswith("#") and current is None:
-            comments.append(line)
-            continue
-        if not stripped and current is None:
+        if not stripped or stripped.startswith("#"):
             comments.append(line)
             continue
 
-        if stripped.lower().startswith("host ") and not stripped.lower().startswith("host *"):
+        keyword = stripped.split(None, 1)[0].casefold()
+        if keyword == "host":
             finish()
-            host_patterns = stripped.split(None, 1)[1].split()
-            if not host_patterns:
+            parts = stripped.split(None, 1)
+            host_patterns = parts[1].split() if len(parts) == 2 else []
+            concrete_patterns = [
+                pattern
+                for pattern in host_patterns
+                if not pattern.startswith("!")
+                and not any(character in pattern for character in WILDCARD_CHARACTERS)
+            ]
+            if not concrete_patterns:
+                comments = []
                 continue
             current = {
-                "alias": host_patterns[0],
+                "alias": concrete_patterns[0],
                 "host_patterns": host_patterns,
                 "options": {},
                 "metadata": parse_metadata(comments),
@@ -59,17 +65,19 @@ def parse_hosts(lines: list[str]) -> list[dict]:
             comments = []
             continue
 
-        if current and (line.startswith(" ") or line.startswith("\t")) and stripped:
+        if keyword == "match":
+            finish()
+            comments = []
+            continue
+
+        if current:
             parts = stripped.split(None, 1)
             if len(parts) == 2:
                 current["options"][parts[0].lower()] = parts[1]
+            comments = []
             continue
 
-        if current and not stripped:
-            finish()
-            comments = [line]
-        else:
-            comments = []
+        comments = []
 
     finish()
     return hosts
@@ -101,11 +109,20 @@ def metadata_values(metadata: dict, key: str) -> list[str]:
 
 def searchable_values(host: dict) -> list[str]:
     metadata = host.get("metadata", {})
-    values = list(host.get("host_patterns", []))
+    values = concrete_host_patterns(host)
     values.extend(str(value) for value in host.get("options", {}).values())
     for key in SUPPORTED_METADATA_KEYS:
         values.extend(metadata_values(metadata, key))
     return values
+
+
+def concrete_host_patterns(host: dict) -> list[str]:
+    return [
+        pattern
+        for pattern in host.get("host_patterns", [])
+        if not pattern.startswith("!")
+        and not any(character in pattern for character in WILDCARD_CHARACTERS)
+    ]
 
 
 def search_hosts(hosts: list[dict], terms: list[str]) -> list[dict]:
@@ -121,9 +138,7 @@ def search_hosts(hosts: list[dict], terms: list[str]) -> list[dict]:
         if not all(term in haystack for term in normalized_terms):
             continue
 
-        host_patterns = {
-            item.casefold() for item in host.get("host_patterns", [])
-        }
+        host_patterns = {item.casefold() for item in concrete_host_patterns(host)}
         aliases = {
             item.casefold()
             for item in metadata_values(host.get("metadata", {}), "aliases")
@@ -149,16 +164,85 @@ def resolve_hosts(hosts: list[dict], terms: list[str]) -> list[dict]:
             host
             for host in hosts
             if normalized_terms[0]
-            in {item.casefold() for item in host.get("host_patterns", [])}
+            in {item.casefold() for item in concrete_host_patterns(host)}
         ]
         if exact_pattern_matches:
             return exact_pattern_matches
+        exact_metadata_aliases = [
+            host
+            for host in hosts
+            if normalized_terms[0]
+            in {
+                item.casefold()
+                for item in metadata_values(host.get("metadata", {}), "aliases")
+            }
+        ]
+        if exact_metadata_aliases:
+            return exact_metadata_aliases
     return search_hosts(hosts, terms)
 
 
 def validate_single_line_field(name: str, value: object) -> None:
-    if isinstance(value, str) and ("\n" in value or "\r" in value):
-        raise ValueError(f"{name} must be a single line")
+    if isinstance(value, str) and any(ord(character) < 32 for character in value):
+        raise ValueError(f"{name} must not contain control characters")
+
+
+def validate_host_alias(alias: str) -> None:
+    validate_single_line_field("alias", alias)
+    if not alias or alias.startswith(("-", "!")):
+        raise ValueError("alias must be a non-option OpenSSH Host name")
+    if any(character.isspace() for character in alias):
+        raise ValueError("alias must not contain whitespace")
+    if "#" in alias or any(
+        character in alias for character in WILDCARD_CHARACTERS
+    ):
+        raise ValueError("alias must be a literal OpenSSH Host name")
+
+
+def validate_port(port: object) -> int:
+    try:
+        value = int(port)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("port must be an integer between 1 and 65535") from exc
+    if not 1 <= value <= 65535:
+        raise ValueError("port must be an integer between 1 and 65535")
+    return value
+
+
+def format_config_value(value: str) -> str:
+    if (
+        not any(character.isspace() for character in value)
+        and '"' not in value
+        and "#" not in value
+    ):
+        return value
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def validate_add_arguments(args: argparse.Namespace) -> None:
+    for name in (
+        "alias",
+        "host",
+        "user",
+        "port",
+        "key",
+        "proxy_jump",
+        "description",
+        "aliases",
+        "groups",
+        "tags",
+        "location",
+    ):
+        validate_single_line_field(name, getattr(args, name, None))
+    validate_host_alias(args.alias)
+    validate_port(args.port)
+    for name in ("host", "user", "proxy_jump"):
+        value = getattr(args, name, None)
+        if value and any(character.isspace() for character in value):
+            raise ValueError(f"{name} must not contain whitespace")
+        if value and "#" in value:
+            raise ValueError(f"{name} must not contain '#'")
 
 
 def backup_config(path: Path) -> Path | None:
@@ -171,8 +255,9 @@ def backup_config(path: Path) -> Path | None:
 
 
 def run_ssh_g(alias: str) -> dict:
+    validate_host_alias(alias)
     proc = subprocess.run(
-        ["ssh", "-G", alias],
+        ["ssh", "-G", "--", alias],
         text=True,
         capture_output=True,
         encoding="utf-8",
@@ -236,13 +321,22 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
 
 def cmd_show(args: argparse.Namespace) -> int:
-    resolved = run_ssh_g(args.alias)
+    try:
+        resolved = run_ssh_g(args.alias)
+    except ValueError as exc:
+        print(json.dumps({
+            "success": False,
+            "error": str(exc),
+        }, ensure_ascii=False, indent=2), file=sys.stderr)
+        return 2
     hosts = parse_hosts(read_lines(ssh_config_path()))
+    folded_alias = args.alias.casefold()
     local = next(
         (
             host
             for host in hosts
-            if args.alias in host.get("host_patterns", [])
+            if folded_alias
+            in {item.casefold() for item in concrete_host_patterns(host)}
         ),
         None,
     )
@@ -261,19 +355,7 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 def cmd_add(args: argparse.Namespace) -> int:
     try:
-        for name in (
-            "alias",
-            "host",
-            "user",
-            "key",
-            "proxy_jump",
-            "description",
-            "aliases",
-            "groups",
-            "tags",
-            "location",
-        ):
-            validate_single_line_field(name, getattr(args, name, None))
+        validate_add_arguments(args)
     except ValueError as exc:
         print(json.dumps({
             "success": False,
@@ -284,7 +366,11 @@ def cmd_add(args: argparse.Namespace) -> int:
     path = ssh_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     hosts = parse_hosts(read_lines(path))
-    if any(args.alias in h.get("host_patterns", []) for h in hosts):
+    folded_alias = args.alias.casefold()
+    if any(
+        folded_alias in {item.casefold() for item in concrete_host_patterns(host)}
+        for host in hosts
+    ):
         print(json.dumps({
             "success": False,
             "error": f"Host alias already exists: {args.alias}",
@@ -310,10 +396,10 @@ def cmd_add(args: argparse.Namespace) -> int:
         f"Host {args.alias}",
         f"    HostName {args.host}",
         f"    User {args.user}",
-        f"    Port {args.port}",
+        f"    Port {validate_port(args.port)}",
     ])
     if args.key:
-        block.append(f"    IdentityFile {args.key}")
+        block.append(f"    IdentityFile {format_config_value(args.key)}")
     if args.proxy_jump:
         block.append(f"    ProxyJump {args.proxy_jump}")
 
