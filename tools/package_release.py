@@ -2,7 +2,6 @@
 import argparse
 import hashlib
 import re
-import shutil
 import subprocess
 import zipfile
 from pathlib import Path
@@ -49,9 +48,17 @@ def write_zip(archive: Path, root: Path, files: list[Path]) -> None:
 
 
 def build_archives(root: Path, output_directory: Path, version: str) -> list[Path]:
-    if output_directory.exists():
-        shutil.rmtree(output_directory)
-    output_directory.mkdir(parents=True)
+    root = root.resolve()
+    output_directory = output_directory.resolve()
+    if output_directory == root:
+        raise ValueError("release output directory must not be the repository root")
+
+    output_directory.mkdir(parents=True, exist_ok=True)
+    for stale_archive in output_directory.glob("embeddedskills-*.zip"):
+        stale_archive.unlink()
+    checksum_file = output_directory / "SHA256SUMS"
+    if checksum_file.exists():
+        checksum_file.unlink()
 
     skill_directories = sorted(
         path for path in root.iterdir() if path.is_dir() and (path / "SKILL.md").is_file()

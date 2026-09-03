@@ -144,9 +144,10 @@ def check_i18n_entrypoints(root: Path) -> list[str]:
     chinese_readme = pairs[0][0].read_text(encoding="utf-8").casefold()
     english_readme = pairs[0][1].read_text(encoding="utf-8").casefold()
     for skill in skill_directories(root):
-        if skill.casefold() not in chinese_readme:
+        marker = f"**{skill.casefold()}**"
+        if marker not in chinese_readme:
             errors.append(f"README.md 未列出 skill: {skill}")
-        if skill.casefold() not in english_readme:
+        if marker not in english_readme:
             errors.append(f"README.en.md 未列出 skill: {skill}")
     return errors
 

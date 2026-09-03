@@ -7,7 +7,12 @@ import sys
 SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from ssh_config import parse_hosts, resolve_hosts, search_hosts  # noqa: E402
+from ssh_config import (  # noqa: E402
+    parse_hosts,
+    resolve_hosts,
+    search_hosts,
+    validate_single_line_field,
+)
 
 
 CONFIG = """\
@@ -58,6 +63,19 @@ class EnvironmentResolutionTests(unittest.TestCase):
     def test_shared_group_is_reported_as_ambiguous(self) -> None:
         matches = resolve_hosts(self.hosts, ["test environment"])
         self.assertEqual(len(matches), 2)
+
+    def test_openssh_pattern_ranks_before_metadata_alias(self) -> None:
+        hosts = parse_hosts((CONFIG + """
+# aliases: test-gpu
+Host a-metadata-alias
+    HostName 192.0.2.30
+""").splitlines())
+        matches = search_hosts(hosts, ["test-gpu"])
+        self.assertEqual(matches[0]["alias"], "test-4090d")
+
+    def test_config_metadata_must_remain_on_one_line(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_single_line_field("groups", "test\nHost injected")
 
 
 if __name__ == "__main__":

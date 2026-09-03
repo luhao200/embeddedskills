@@ -45,6 +45,8 @@ def build_command(args: argparse.Namespace) -> list[str]:
         "-o",
         "PermitLocalCommand=no",
         "-o",
+        "ProxyCommand=none",
+        "-o",
         "StrictHostKeyChecking=accept-new"
         if args.accept_new_host_key
         else "StrictHostKeyChecking=yes",

@@ -113,7 +113,7 @@ def search_hosts(hosts: list[dict], terms: list[str]) -> list[dict]:
     if not normalized_terms:
         return []
 
-    matches: list[tuple[int, str, dict]] = []
+    matches: list[tuple[int, int, str, dict]] = []
     for host in hosts:
         values = searchable_values(host)
         folded_values = [value.casefold() for value in values]
@@ -128,12 +128,18 @@ def search_hosts(hosts: list[dict], terms: list[str]) -> list[dict]:
             item.casefold()
             for item in metadata_values(host.get("metadata", {}), "aliases")
         }
-        exact_matches = sum(
-            term in host_patterns or term in aliases for term in normalized_terms
+        exact_pattern_matches = sum(
+            term in host_patterns for term in normalized_terms
         )
-        matches.append((-exact_matches, host["alias"].casefold(), host))
+        exact_alias_matches = sum(term in aliases for term in normalized_terms)
+        matches.append((
+            -exact_pattern_matches,
+            -exact_alias_matches,
+            host["alias"].casefold(),
+            host,
+        ))
 
-    return [item[2] for item in sorted(matches, key=lambda item: item[:2])]
+    return [item[3] for item in sorted(matches, key=lambda item: item[:3])]
 
 
 def resolve_hosts(hosts: list[dict], terms: list[str]) -> list[dict]:
@@ -148,6 +154,11 @@ def resolve_hosts(hosts: list[dict], terms: list[str]) -> list[dict]:
         if exact_pattern_matches:
             return exact_pattern_matches
     return search_hosts(hosts, terms)
+
+
+def validate_single_line_field(name: str, value: object) -> None:
+    if isinstance(value, str) and ("\n" in value or "\r" in value):
+        raise ValueError(f"{name} must be a single line")
 
 
 def backup_config(path: Path) -> Path | None:
@@ -249,6 +260,27 @@ def cmd_show(args: argparse.Namespace) -> int:
 
 
 def cmd_add(args: argparse.Namespace) -> int:
+    try:
+        for name in (
+            "alias",
+            "host",
+            "user",
+            "key",
+            "proxy_jump",
+            "description",
+            "aliases",
+            "groups",
+            "tags",
+            "location",
+        ):
+            validate_single_line_field(name, getattr(args, name, None))
+    except ValueError as exc:
+        print(json.dumps({
+            "success": False,
+            "error": str(exc),
+        }, ensure_ascii=False, indent=2), file=sys.stderr)
+        return 2
+
     path = ssh_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     hosts = parse_hosts(read_lines(path))
