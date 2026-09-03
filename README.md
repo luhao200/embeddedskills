@@ -108,7 +108,7 @@ npx skills add https://github.com/zhinkgit/embeddedskills -g -y
 | 🔌 通信 | **serial** | 扫描串口、实时监控、发送数据、Hex 查看 | `scan` `monitor` `send` `hex` `log` |
 | 🔌 通信 | **can** | CAN/CAN-FD 监控、发帧、DBC 解码、统计 | `scan` `monitor` `send` `decode` `stats` |
 | 🔌 通信 | **net** | 抓包分析、连通性测试、端口扫描、流量统计 | `capture` `analyze` `ping` `scan` `stats` |
-| 🔌 通信 | **ssh** | SSH 配置、远程命令、上传下载、跳板机和端口转发 | `list` `find` `show` `add` + exec/transfer/tunnel |
+| 🔌 通信 | **ssh** | SSH 配置、环境解析、只读探测、远程命令、上传下载、跳板机和端口转发 | `list` `find` `resolve` `show` `add` + exec/probe/transfer/tunnel |
 | 🔌 通信 | **terminal** | 串口、SSH、本地 Shell 双向交互会话 | `start` `send` `read` `attach` `stop` |
 | 🎯 编排 | **workflow** | 自动识别工程 → 选择工具链 → 串联全流程 | `plan` `build` `build-flash` `build-debug` `observe` `diagnose` |
 
