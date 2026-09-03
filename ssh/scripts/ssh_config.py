@@ -183,8 +183,12 @@ def resolve_hosts(hosts: list[dict], terms: list[str]) -> list[dict]:
 
 
 def validate_single_line_field(name: str, value: object) -> None:
-    if isinstance(value, str) and any(ord(character) < 32 for character in value):
+    if isinstance(value, str) and has_control_characters(value):
         raise ValueError(f"{name} must not contain control characters")
+
+
+def has_control_characters(value: str) -> bool:
+    return any(ord(character) < 32 or ord(character) == 127 for character in value)
 
 
 def validate_host_alias(alias: str) -> None:

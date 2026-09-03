@@ -23,8 +23,12 @@ value container "$(test -f /.dockerenv && printf docker || true)"
 def validate_alias(alias: str) -> None:
     if not alias or alias.startswith("-"):
         raise ValueError("alias must be a non-option OpenSSH Host name")
-    if any(character.isspace() or ord(character) < 32 for character in alias):
+    if any(character.isspace() for character in alias) or has_control_characters(alias):
         raise ValueError("alias must not contain whitespace or control characters")
+
+
+def has_control_characters(value: str) -> bool:
+    return any(ord(character) < 32 or ord(character) == 127 for character in value)
 
 
 def validate_arguments(args: argparse.Namespace) -> None:
@@ -33,9 +37,7 @@ def validate_arguments(args: argparse.Namespace) -> None:
         raise ValueError("timeout must be greater than zero")
     if args.connect_timeout <= 0:
         raise ValueError("connect-timeout must be greater than zero")
-    if args.known_hosts_file and any(
-        ord(character) < 32 for character in args.known_hosts_file
-    ):
+    if args.known_hosts_file and has_control_characters(args.known_hosts_file):
         raise ValueError("known-hosts-file must not contain control characters")
 
 
