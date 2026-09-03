@@ -9,11 +9,31 @@ from tools.repo_checks import (
     check_i18n_entrypoints,
     check_skill_metadata,
     local_link_target,
+    matching_files,
     parse_frontmatter,
 )
+from tools.run_tests import find_test_directories
 
 
 class RepositoryCheckTests(unittest.TestCase):
+    def test_matching_files_ignores_skip_names_above_repository_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "dist" / "repo"
+            root.mkdir(parents=True)
+            expected = root / "README.md"
+            expected.write_text("content", encoding="utf-8")
+
+            self.assertEqual(matching_files(root, "*.md"), [expected])
+
+    def test_test_discovery_ignores_skip_names_above_repository_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".venv" / "repo"
+            tests = root / "demo" / "tests"
+            tests.mkdir(parents=True)
+            (tests / "test_demo.py").write_text("", encoding="utf-8")
+
+            self.assertEqual(find_test_directories(root), [tests])
+
     def test_frontmatter_parser_reads_required_fields(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "SKILL.md"

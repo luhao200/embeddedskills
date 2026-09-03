@@ -7,15 +7,21 @@ from pathlib import Path
 SKIP_DIRECTORIES = {".git", ".venv", "__pycache__", "dist"}
 
 
-def main() -> int:
-    root = Path(__file__).resolve().parents[1]
-    test_directories = sorted(
+def find_test_directories(root: Path) -> list[Path]:
+    return sorted(
         path
         for path in root.rglob("tests")
         if path.is_dir()
         and any(path.glob("test_*.py"))
-        and not any(part in SKIP_DIRECTORIES for part in path.parts)
+        and not any(
+            part in SKIP_DIRECTORIES for part in path.relative_to(root).parts
+        )
     )
+
+
+def main() -> int:
+    root = Path(__file__).resolve().parents[1]
+    test_directories = find_test_directories(root)
     if not test_directories:
         print("No test directories found.")
         return 0
