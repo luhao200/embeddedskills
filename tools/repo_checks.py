@@ -29,7 +29,7 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
     text = path.read_text(encoding="utf-8")
     match = FRONTMATTER_PATTERN.match(text)
     if not match:
-        raise ValueError("缺少以 --- 包围的 frontmatter")
+        raise ValueError("missing frontmatter enclosed by ---")
 
     values: dict[str, str] = {}
     for line in match.group(1).splitlines():
@@ -51,10 +51,10 @@ def check_skill_metadata(root: Path) -> list[str]:
         expected_name = path.parent.name
         if metadata.get("name") != expected_name:
             errors.append(
-                f"{path.relative_to(root)}: name 应为 {expected_name!r}"
+                f"{path.relative_to(root)}: name must be {expected_name!r}"
             )
         if not metadata.get("description"):
-            errors.append(f"{path.relative_to(root)}: description 不能为空")
+            errors.append(f"{path.relative_to(root)}: description must not be empty")
     return errors
 
 
@@ -104,13 +104,13 @@ def check_markdown_links(root: Path) -> list[str]:
                 resolved.relative_to(root.resolve())
             except ValueError:
                 errors.append(
-                    f"{path.relative_to(root)}: 本地链接越出仓库范围: {target}"
+                    f"{path.relative_to(root)}: local link escapes repository: {target}"
                 )
                 continue
             if not resolved.exists():
                 line = text.count("\n", 0, match.start()) + 1
                 errors.append(
-                    f"{path.relative_to(root)}:{line}: 本地链接不存在: {target}"
+                    f"{path.relative_to(root)}:{line}: local link does not exist: {target}"
                 )
     return errors
 
@@ -134,9 +134,9 @@ def check_i18n_entrypoints(root: Path) -> list[str]:
     ]
     for chinese, english in pairs:
         if not chinese.is_file():
-            errors.append(f"缺少中文入口: {chinese.relative_to(root)}")
+            errors.append(f"missing Chinese entrypoint: {chinese.relative_to(root)}")
         if not english.is_file():
-            errors.append(f"缺少英文入口: {english.relative_to(root)}")
+            errors.append(f"missing English entrypoint: {english.relative_to(root)}")
 
     if not all(path.is_file() for pair in pairs for path in pair):
         return errors
@@ -146,9 +146,9 @@ def check_i18n_entrypoints(root: Path) -> list[str]:
     for skill in skill_directories(root):
         marker = f"**{skill.casefold()}**"
         if marker not in chinese_readme:
-            errors.append(f"README.md 未列出 skill: {skill}")
+            errors.append(f"README.md does not list skill: {skill}")
         if marker not in english_readme:
-            errors.append(f"README.en.md 未列出 skill: {skill}")
+            errors.append(f"README.en.md does not list skill: {skill}")
     return errors
 
 
@@ -176,11 +176,11 @@ def main() -> int:
     root = args.root.resolve()
     errors = run_checks(root)
     if errors:
-        print("\n校验失败：", file=sys.stderr)
+        print("\nValidation failed:", file=sys.stderr)
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
-    print("\n全部仓库校验通过。")
+    print("\nAll repository checks passed.")
     return 0
 
 
