@@ -6,6 +6,7 @@ Claude Code skill，用于 SSH 服务器与 Linux 开发板操作：OpenSSH 配�
 
 - 读取、查询和新增 `~/.ssh/config` 中的 `Host` 别名
 - 通过 Host 别名执行远程命令，并返回结构化 JSON
+- 通过固定只读命令探测远端系统、运行时和 GPU 概况
 - 使用 `scp` 上传和下载文件
 - 建立本地端口转发，支持访问远端服务
 - 支持 `ProxyJump` 跳板机配置
@@ -130,6 +131,22 @@ python scripts/ssh_exec.py <别名> "uname -a" --timeout 30
 ```
 
 脚本输出 JSON，包含 `success`、`exit_code`、`stdout`、`stderr`。
+
+### 探测远端环境
+
+```bash
+python scripts/ssh_probe.py <别名>
+```
+
+该命令只执行内置的只读探测，不接受任意远程命令。结果以 JSON 返回，包含
+操作系统、架构、内核、CPU 数量、内存、Python、Node.js、GPU 和容器环境等
+信息。连接默认使用非交互认证、禁止转发，并要求主机指纹已经可信。
+
+执行前预览固定命令：
+
+```bash
+python scripts/ssh_probe.py <别名> --dry-run
+```
 
 ### 上传文件
 

@@ -18,6 +18,7 @@ description: SSH/服务器操作助手。用于远程服务器、user@host、SSH
 - 使用 `Host` 别名标识服务器，不直接记忆 IP/密码。
 - 优先密钥认证和 OpenSSH 原生命令。
 - 通过本 skill 的 `scripts/` 脚本执行 SSH、SCP、配置检查和隧道操作。
+- 环境识别优先使用固定只读探测，不用任意命令拼接临时采集脚本。
 - 写入 `~/.ssh/config` 前必须自动备份。
 - 不鼓励密码落盘；如必须使用密码，优先让 OpenSSH 交互提示或由用户自行配置安全凭据。
 
@@ -112,6 +113,16 @@ python scripts/ssh_exec.py <别名> "命令" --timeout 30
 ```
 
 脚本输出 JSON，包含 `success`、`exit_code`、`stdout`、`stderr`。
+
+### 探测远端环境
+
+```bash
+python scripts/ssh_probe.py <别名>
+```
+
+探测脚本只执行内置只读命令，并输出结构化 JSON。它默认启用非交互认证、
+禁止端口和 Agent 转发，并要求主机指纹已经可信。需要先查看命令时使用
+`--dry-run`；只有确认新设备可信时才使用 `--accept-new-host-key`。
 
 ### 上传文件
 
