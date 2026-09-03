@@ -37,8 +37,8 @@ class RepositoryCheckTests(unittest.TestCase):
             (root / "docs" / "getting-started.md").write_text("", encoding="utf-8")
             (root / "docs" / "getting-started.en.md").write_text("", encoding="utf-8")
             errors = check_i18n_entrypoints(root)
-            self.assertIn("README.md 未列出 skill: can", errors)
-            self.assertIn("README.en.md 未列出 skill: can", errors)
+            self.assertIn("README.md does not list skill: can", errors)
+            self.assertIn("README.en.md does not list skill: can", errors)
 
 
 class ReleasePackageTests(unittest.TestCase):
